@@ -38,12 +38,12 @@ save_3d_stixels = False
 save_3d_visualization_video = False
 
 dataset = "ma2"
-sequence = "scen6"
-mode = "fusion" #"fastsam" #"rwps" #"fusion"
+sequence = "scen4_2"
+mode = "fastsam" #"fastsam" #"rwps" #"fusion"
 iou_threshold = 0.1
 fastsam_model_path = "weights/FastSAM-x.pt"
 device = "cuda"
-src_dir = "/home/johannes/Documents/blueboats/prosjektoppgave"
+src_dir = r"C:\Users\johro\Documents\BB-Perception\master"
 
 W, H = (1920, 1080)
 FPS = 15.0
@@ -85,7 +85,7 @@ temporal_smoothing = TemporalSmoothing(5, K)
 cam_params = {"cx": K[0,2], "cy": K[1,2], "fx": K[0,0], "fy":K[1,1], "b": baseline}
 P1 = K @ np.hstack((np.eye(3), np.zeros((3, 1))))
 
-config_rwps = f"{src_dir}/rwps_config.json"
+config_rwps = f"{src_dir}\\rwps_config.json"
 p1 = (102, 22)
 p2 = (102, 639)
 invalid_depth_mask = rwps3d.set_invalid(p1, p2, shape=(H - 1, W))
@@ -109,10 +109,16 @@ def main():
     iterating = True
     curr_frame = 0
 
+    lidar_update = False
+    image_update = False
+    lidar_update_prev = False
+
     while iterating:
         if next_ma2_timestamp is not None and next_svo_timestamp is not None:
             if next_ma2_timestamp < next_svo_timestamp:
                 #print("Lidar")
+                lidar_update = True
+                image_update = False
                 try:
                     next_ma2_timestamp, next_ma2_lidar_points, intensity, xyz_c = next(gen_lidar)
                     current_timestamp = next_ma2_timestamp
@@ -123,6 +129,8 @@ def main():
             else:
                 #print("SVO")
                 #cv2.imshow("SVO image", next_svo_image)
+                lidar_update = False
+                image_update = True
                 try:
                     next_svo_timestamp, next_svo_image, disparity_img, depth_img = next(gen_svo)
                     current_timestamp = next_svo_timestamp
@@ -132,6 +140,8 @@ def main():
                     next_svo_image = None
         elif next_ma2_timestamp is not None:
             #print("Lidar")
+            lidar_update = True
+            image_update = False
             try:
                 next_ma2_timestamp, next_ma2_lidar_points, intensity, xyz_c = next(gen_lidar)
                 current_timestamp = next_ma2_timestamp
@@ -142,6 +152,8 @@ def main():
         elif next_svo_timestamp is not None:
             #print("SVO")
             #cv2.imshow("SVO image", next_svo_image)
+            lidar_update = False
+            image_update = True
             try:
                 next_svo_timestamp, next_svo_image, disparity_img, depth_img = next(gen_svo)
                 current_timestamp = next_svo_timestamp
@@ -151,6 +163,10 @@ def main():
                 next_svo_image = None
         else:
             break
+
+        if lidar_update and lidar_update_prev:
+            continue
+        lidar_update_prev = lidar_update
         
         print(f"Current timestamp: {current_timestamp}")
         curr_frame += 1
@@ -384,8 +400,6 @@ def main():
 
 
         #image_with_lidar = merge_lidar_onto_image(left_img, lidar_image_points)
-
-        cv2.imshow("Left image", left_img)
         
         #cv2.imshow("Image with lidar", image_with_lidar)
         #cv2.imwrite("files/image_with_lidar.png", image_with_lidar)

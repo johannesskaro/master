@@ -7,8 +7,8 @@ from scipy.spatial.transform import Rotation as R
 import pyzed.sl as sl
 
 import sys
-#sys.path.insert(0, r"C:\Users\johro\Documents\BB-Perception\2023-summer-experiment\python_tools")
-sys.path.insert(0, "/home/johannes/Documents/blueboats/prosjektoppgave/python_tools")
+sys.path.insert(0, r"C:\Users\johro\Documents\BB-Perception\2023-summer-experiment\python_tools")
+#sys.path.insert(0, "/home/johannes/Documents/blueboats/prosjektoppgave/python_tools")
 from python_tools.stereo_svo import SVOCamera
 
 #Scen1 - Into tunnel
@@ -28,14 +28,14 @@ from python_tools.stereo_svo import SVOCamera
 
 
 #Scen4_2 - Docking w. boats
-#SVO_FILE_PATH = "/home/johannes/Documents/2023-07-11_Multi_ZED_Summer/ZED camera svo files/2023-07-11_12-20-43_28170706_HD1080_FPS15.svo" #right zed 
-#SVO_FILE_PATH = "/home/johannes/Documents/2023-07-11_Multi_ZED_Summer/ZED camera svo files/2023-07-11_12-20-43_5256916_HD1080_FPS15.svo" #left zed
-#ROSBAG_NAME = "scen4_2"
+SVO_FILE_PATH = r"C:\Users\johro\Documents\2023-07-11_Multi_ZED_Summer\ZED camera svo files\2023-07-11_12-20-43_28170706_HD1080_FPS15.svo" #right zed 
+#SVO_FILE_PATH = r"C:\Users\johro\Documents\2023-07-11_Multi_ZED_Summer\ZED camera svo files\2023-07-11_12-20-43_5256916_HD1080_FPS15.svo" #left zed
+ROSBAG_NAME = "scen4_2"
 #START_TIMESTAMP = 1689070899731613030
-#START_TIMESTAMP = 1689070888907352002# Starting to see kayak
+START_TIMESTAMP = 1689070888907352002# Starting to see kayak
 #START_TIMESTAMP = 1689070910831613030 #Docking
-#ma2_clap_timestamps = np.array([1689070864130009197, 1689070865931143443, 1689070867729428949, 1689070870332243623, 1689070872330384680])
-#svo_clap_timestamps = np.array([1689070864415441257, 1689070866090016257, 1689070867898886257, 1689070870444290257, 1689070872386914257]) 
+ma2_clap_timestamps = np.array([1689070864130009197, 1689070865931143443, 1689070867729428949, 1689070870332243623, 1689070872330384680])
+svo_clap_timestamps = np.array([1689070864415441257, 1689070866090016257, 1689070867898886257, 1689070870444290257, 1689070872386914257]) 
 
 
 #Scen5 - Docking with tube
@@ -51,19 +51,20 @@ from python_tools.stereo_svo import SVOCamera
 
 
 #Scen6 - Docking with tube further away
-SVO_FILE_PATH = "/home/johannes/Documents/2023-07-11_Multi_ZED_Summer/ZED camera svo files/2023-07-11_12-55-58_28170706_HD1080_FPS15.svo" #port side zed
+#SVO_FILE_PATH = r"C:\Users\johro\Documents\2023-07-11_Multi_ZED_Summer\ZED camera svo files\2023-07-11_12-55-58_28170706_HD1080_FPS15.svo" #port side zed
 #SVO_FILE_PATH = r"C:\Users\johro\Documents\2023-07-11_Multi_ZED_Summer\ZED camera svo files\2023-07-11_12-55-58_5256916_HD1080_FPS15.svo" # left zed
-ROSBAG_NAME = "scen6"
-START_TIMESTAMP = 1689073008428931880# Starting to see tube
+#ROSBAG_NAME = "scen6"
+#START_TIMESTAMP = 1689073008428931880# Starting to see tube
 #START_TIMESTAMP = 1689073018428931880 # tube almost passed
 #START_TIMESTAMP = 1689073021428931880 # tube passed
-ma2_clap_timestamps = np.array([1689072978427718986, 1689072980427686560, 1689072982230896164, 1689072984228220707])
-svo_clap_timestamps = np.array([1689072978666263269, 1689072980675916269, 1689072982484494269, 1689072984360142269])
+#ma2_clap_timestamps = np.array([1689072978427718986, 1689072980427686560, 1689072982230896164, 1689072984228220707])
+#svo_clap_timestamps = np.array([1689072978666263269, 1689072980675916269, 1689072982484494269, 1689072984360142269])
 
 
 diffs_s = (ma2_clap_timestamps - svo_clap_timestamps) / (10 ** 9)
 GNSS_MINUS_ZED_TIME_NS = np.mean(ma2_clap_timestamps - svo_clap_timestamps)
-ROSBAG_FOLDER = "/home/johannes/Documents/2023-07-11_Multi_ZED_Summer/bags"
+#ROSBAG_FOLDER = "/home/johannes/Documents/2023-07-11_Multi_ZED_Summer/bags"
+ROSBAG_FOLDER = r"C:\Users\johro\Documents\2023-07-11_Multi_ZED_Summer\bags"
 ROSBAG_PATH = f"{ROSBAG_FOLDER}/{ROSBAG_NAME}"
 
 
