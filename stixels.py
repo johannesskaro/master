@@ -120,6 +120,61 @@ class Stixels:
 
         return self.rectangular_stixel_list, rectangular_stixel_mask
     
+    def create_rectangular_stixels_2(self, water_mask, disparity_map, depth_map):
+        free_space_boundary, _ = self.get_free_space_boundary(water_mask)
+        stixel_width = self.get_stixel_width(water_mask.shape[1])
+
+        std_dev_threshold = 0.35
+        min_stixel_height = 20
+
+        rectangular_stixel_mask = np.zeros_like(water_mask)
+        self.rectangular_stixel_list = []
+
+        for n in range(self.num_stixels):
+            stixel_range = slice(n * stixel_width, (n + 1) * stixel_width)
+            stixel_base = free_space_boundary[stixel_range]
+            stixel_base_height = int(np.median(stixel_base))
+            stixel_top_height = stixel_base_height - min_stixel_height
+
+            # Forhåndsberegn rad-medianer for de aktuelle kolonnene (hele bildet)
+            stixel_disparity = disparity_map[:, stixel_range]
+            row_medians = np.nanmedian(stixel_disparity, axis=1)
+
+            # Inkrementell standardavvik 
+            mean = 0.0
+            M2 = 0.0
+            count = 0
+
+            # Gå nedover fra base_height til 0
+            for v in range(stixel_base_height, -1, -1):
+                x = row_medians[v]
+                count += 1
+
+                # Oppdater løpende mean og M2
+                delta = x - mean
+                mean += delta / count
+                delta2 = x - mean
+                M2 += delta * delta2
+
+                if count > 1:
+                    current_std = np.sqrt(M2 / (count - 1))
+                    if current_std > std_dev_threshold:
+                        stixel_top_height = v
+                        if (stixel_base_height - v) < min_stixel_height:
+                            stixel_top_height = stixel_base_height - min_stixel_height
+                        break
+
+            # Median av disparity- og depth-region
+            stixel_median_disp = np.nanmedian(disparity_map[stixel_top_height:stixel_base_height, stixel_range])
+            stixel_median_depth = np.nanmedian(depth_map[stixel_top_height:stixel_base_height, stixel_range])
+
+            stixel = [stixel_top_height, stixel_base_height, stixel_median_disp, stixel_median_depth]
+            self.rectangular_stixel_list.append(stixel)
+
+            rectangular_stixel_mask[stixel_top_height:stixel_base_height, stixel_range] = 1
+
+        return self.rectangular_stixel_list, rectangular_stixel_mask
+    
     def get_stixel_3d_points(self, camera_params):
         stixel_list = self.rectangular_stixel_list
         stixel_3d_points = np.zeros((self.num_stixels, 4, 3))

@@ -168,8 +168,9 @@ def main():
             continue
         lidar_update_prev = lidar_update
         
-        print(f"Current timestamp: {current_timestamp}")
+        #print(f"Current timestamp: {current_timestamp}")
         curr_frame += 1
+        print(f"Frame: {curr_frame}")
 
         left_img = next_svo_image
         lidar_image_points = np.squeeze(next_ma2_lidar_points, axis=1)  # From (N, 1, 2) to (N, 2)
@@ -295,7 +296,7 @@ def main():
         )
 
         if create_rectangular_stixels:
-            rec_stixel_list, rec_stixel_mask = stixels.create_rectangular_stixels(water_mask, disparity_img, depth_img)
+            rec_stixel_list, rec_stixel_mask = stixels.create_rectangular_stixels_2(water_mask, disparity_img, depth_img)
             #cv2.imshow("Rectangular Stixels", rectangular_stixel_mask.astype(np.uint8) * 255)
             _, free_space_boundary = stixels.get_free_space_boundary(water_mask)
 
