@@ -164,9 +164,9 @@ def main():
         else:
             break
 
-        if lidar_update and lidar_update_prev:
+        if lidar_update: # and lidar_update_prev:
             continue
-        lidar_update_prev = lidar_update
+        #lidar_update_prev = lidar_update
         
         #print(f"Current timestamp: {current_timestamp}")
         curr_frame += 1
@@ -296,9 +296,10 @@ def main():
         )
 
         if create_rectangular_stixels:
-            rec_stixel_list, rec_stixel_mask = stixels.create_rectangular_stixels_2(water_mask, disparity_img, depth_img)
+            #rec_stixel_list, rec_stixel_mask = stixels.create_rectangular_stixels_2(water_mask, disparity_img, depth_img)
             #cv2.imshow("Rectangular Stixels", rectangular_stixel_mask.astype(np.uint8) * 255)
-            _, free_space_boundary = stixels.get_free_space_boundary(water_mask)
+            free_space_boundary, free_space_boundary_mask = stixels.get_free_space_boundary(water_mask)
+            rec_stixel_list, rec_stixel_mask, normalized_membership, normalized_cost = stixels.create_stixels(disparity_img, depth_img, free_space_boundary, cam_params) 
 
             stixel_mask, stixel_positions = stixels.get_stixels_base(water_mask)
 
@@ -308,7 +309,24 @@ def main():
             stixels_polygon = create_polygon_from_2d_points(stixels_2d_points)
             #stixels_3d_points = stixels.get_stixel_3d_points(cam_params)
 
+            
+            #membership_image = stixels.create_membership_image(disparity_img, depth_img, free_space_boundary, cam_params)
+            #normalized = (membership_image - membership_image.min()) / (membership_image.max() - membership_image.min())
+        
+            
 
+            #cost_image = stixels.create_cost_image(membership_image, disparity_img, free_space_boundary)
+            #normalized_cost = (cost_image - cost_image.min()) / (cost_image.max() - cost_image.min())
+            #boundary, boundary_mask, _ = stixels.get_optimal_height(cost_image, depth_img, free_space_boundary)
+            #boundary, boundary_mask = stixels.get_greedy_height(cost_image, free_space_boundary)
+
+            #print(f"boundary: {boundary}")
+            #cv2.imshow("Membership", membership_image)
+            cv2.imshow("normilized", normalized_membership)
+            #cv2.imshow("Cost", cost_image.astype(np.uint8)*255)
+            cv2.imshow("normilized cost", normalized_cost)
+            #cv2.imshow("Boundary", boundary_mask.astype(np.uint8)*255)
+            cv2.imshow("Stixels", rec_stixel_mask.astype(np.uint8) * 255)
 
         if create_polygon:    
             stixel_mask, stixel_positions = stixels.get_stixels_base(water_mask)
