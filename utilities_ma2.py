@@ -3,6 +3,8 @@ from rosbags.serde import deserialize_cdr
 import cv2
 import numpy as np
 from scipy.spatial.transform import Rotation as R
+from shapely.geometry import Point
+from shapely.geometry.polygon import Polygon
 
 import pyzed.sl as sl
 
@@ -31,7 +33,7 @@ from python_tools.stereo_svo import SVOCamera
 SVO_FILE_PATH = r"C:\Users\johro\Documents\2023-07-11_Multi_ZED_Summer\ZED camera svo files\2023-07-11_12-20-43_28170706_HD1080_FPS15.svo" #right zed 
 #SVO_FILE_PATH = r"C:\Users\johro\Documents\2023-07-11_Multi_ZED_Summer\ZED camera svo files\2023-07-11_12-20-43_5256916_HD1080_FPS15.svo" #left zed
 ROSBAG_NAME = "scen4_2"
-START_TIMESTAMP = 1689070899731613030
+START_TIMESTAMP = 1689070899731613030 #+ 10000000000
 #START_TIMESTAMP = 1689070888907352002# Starting to see kayak
 #START_TIMESTAMP = 1689070910831613030 #Docking
 ma2_clap_timestamps = np.array([1689070864130009197, 1689070865931143443, 1689070867729428949, 1689070870332243623, 1689070872330384680])
@@ -133,9 +135,10 @@ K, D = stereo_cam.get_left_parameters()
 _, _, R, T = stereo_cam.get_right_parameters()
 focal_length = K[0,0]
 baseline = np.linalg.norm(T)
+width, height = 1920, 1080
 
 def gen_svo_images():
-    num_frames = 100 #275
+    num_frames = 275
     curr_frame = 0
     while stereo_cam.grab() == sl.ERROR_CODE.SUCCESS and curr_frame < num_frames:
         image = stereo_cam.get_left_image(should_rectify=True)
@@ -175,11 +178,68 @@ def gen_ma2_lidar_points():
                 distCoeff = np.zeros((1,5), dtype=np.float32)
                 image_points, _ = cv2.projectPoints(xyz_c, rvec, tvec, K, distCoeff)
                 
+                
                 xyz_c_forward = xyz_c[xyz_c[:,2] > 0]
                 image_points_forward = image_points[xyz_c[:,2] > 0]
+
                 intensity_clipped_forward = intensity_clipped[xyz_c[:,2] > 0]
 
                 yield timestamp, image_points_forward, intensity_clipped_forward, xyz_c_forward
+
+def gen_ma2_lidar_depth_image():
+
+    IMAGE_WIDTH = 1920
+    IMAGE_HEIGHT = 32  # This is fixed since we have 32 LiDAR rows
+
+    with Reader(ROSBAG_PATH) as reader:
+        connections = [c for c in reader.connections if c.topic == LIDAR_TOPIC]
+        assert len(connections) == 1
+        
+        for connection, timestamp, rawdata in reader.messages(connections):
+            if timestamp > START_TIMESTAMP:
+                msg = deserialize_cdr(rawdata, connection.msgtype)
+                xyz = msg.data.reshape(-1, msg.point_step)[:,:12].view(dtype=np.float32)
+                xyz_c = H.dot(np.r_[xyz.T, np.ones((1, xyz.shape[0]))])[0:3, :].T
+
+                xyz_c_reshaped = xyz_c.reshape(32, 2048, 3)
+
+                rvec = np.zeros((1,3), dtype=np.float32)
+                tvec = np.zeros((1,3), dtype=np.float32)
+                distCoeff = np.zeros((1,5), dtype=np.float32)
+                image_polygon = Polygon([(0, 0), (width, 0), (width, height), (0, height)])
+
+                lidar_depth_image = np.full((IMAGE_HEIGHT, IMAGE_WIDTH), np.nan, dtype=np.float32)
+
+                for row_idx in range(IMAGE_HEIGHT):
+                    row_points = xyz_c_reshaped[row_idx]
+                    image_points, _ = cv2.projectPoints(row_points, rvec, tvec, K, distCoeff)
+                    image_points = image_points.squeeze()
+
+                    mask_forward = row_points[:,2] > 0
+                    row_points_forward = row_points[mask_forward]
+                    image_points_forward = image_points[mask_forward]
+                    
+                    inside_indices = np.array([i for i, pt in enumerate(image_points_forward) if image_polygon.contains(Point(pt))], dtype=int)
+
+
+                    row_filtered_image_points = image_points_forward[inside_indices]
+                    row_filtered_xyz_c = row_points_forward[inside_indices]
+
+                    if row_filtered_image_points.shape[0] == 0:
+                        continue  # Skip if no valid points in this row
+
+                    # Normalize x-coordinates to range [0, 1920]
+                    col_indices = np.clip((row_filtered_image_points[:, 0] / width) * IMAGE_WIDTH, 0, IMAGE_WIDTH - 1).astype(int)
+
+                    for i, col in enumerate(col_indices):
+                        depth = row_filtered_xyz_c[i, 2]  # Use Z (depth)
+                        if np.isnan(lidar_depth_image[row_idx, col]) or depth < lidar_depth_image[row_idx, col]:
+                            lidar_depth_image[row_idx, col] = depth  # Keep closest point
+
+
+                yield timestamp, lidar_depth_image
+
+
 
 def transform_from_image_plane_to_3d(xyz_c):
 

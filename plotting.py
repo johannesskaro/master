@@ -58,3 +58,27 @@ def plot_stixel_img_without_column(img, stixel_mask, column, width=5):
     plt.xlabel('Width [px]')
     plt.legend()
     plt.show(block=True)
+
+
+
+def show_lidar_image(lidar_depth_image, window_name="LiDAR Depth Image", scale_factor=10):
+
+    # Replace NaNs with zero or interpolate
+    lidar_depth_image = np.nan_to_num(lidar_depth_image, nan=0.0)
+
+    # Normalize depth values to range [0, 255]
+    lidar_depth_normalized = cv2.normalize(lidar_depth_image, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
+
+    # Convert to uint8 (for OpenCV display)
+    lidar_depth_uint8 = np.uint8(lidar_depth_normalized)
+
+    # Apply a colormap for better visualization
+    lidar_depth_colormap = cv2.applyColorMap(lidar_depth_uint8, cv2.COLORMAP_JET)
+
+     # Scale the image to make the rows thicker
+    height, width = lidar_depth_colormap.shape[:2]
+    new_height = height * scale_factor  # Make rows thicker
+    lidar_depth_colormap = cv2.resize(lidar_depth_colormap, (width, new_height), interpolation=cv2.INTER_NEAREST)
+
+    # Show the image
+    cv2.imshow(window_name, lidar_depth_colormap)
