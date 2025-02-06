@@ -105,7 +105,7 @@ def main():
 
     next_ma2_timestamp, next_ma2_lidar_points, intensity, xyz_c = next(gen_lidar)
     next_svo_timestamp, next_svo_image, disparity_img, depth_img = next(gen_svo)
-    _, lidar_depth_image = next(gen_lidar_in_image)
+    _, lidar_depth_image, scanline_to_img_row, img_row_to_scanline = next(gen_lidar_in_image)
     current_timestamp = 0
 
     iterating = True
@@ -124,7 +124,7 @@ def main():
                 try:
                     next_ma2_timestamp, next_ma2_lidar_points, intensity, xyz_c = next(gen_lidar)
                     current_timestamp = next_ma2_timestamp
-                    _, lidar_depth_image = next(gen_lidar_in_image)
+                    _, lidar_depth_image, scanline_to_img_row, img_row_to_scanline = next(gen_lidar_in_image)
                 except StopIteration:
                     iterating = False
                     next_ma2_timestamp = None
@@ -148,7 +148,7 @@ def main():
             try:
                 next_ma2_timestamp, next_ma2_lidar_points, intensity, xyz_c = next(gen_lidar)
                 current_timestamp = next_ma2_timestamp
-                _, lidar_depth_image = next(gen_lidar_in_image)
+                _, lidar_depth_image, scanline_to_img_row, img_row_to_scanline = next(gen_lidar_in_image)
             except StopIteration:
                 iterating = False
                 next_ma2_timestamp = None
@@ -180,13 +180,12 @@ def main():
         lidar_image_points = np.squeeze(next_ma2_lidar_points, axis=1)  # From (N, 1, 2) to (N, 2)
         lidar_3d_points = xyz_c
 
-        #print(f"Number of lidar points: {len(lidar_image_points)}")
 
-        #print(lidar_depth_image)
-        show_lidar_image(lidar_depth_image)
+        #print(img_row_to_scanline)
+        #print(scanline_to_img_row)
+        
 
         (H, W, D) = left_img.shape
-        print(f"Image shape: {left_img.shape}")
 
         # Run RWPS segmentation
         rwps_mask_3d, plane_params_3d, rwps_succeded = rwps3d.segment_water_plane_using_point_cloud(
@@ -323,15 +322,9 @@ def main():
             #stixels_2d_points = stixels.get_polygon_points_from_lidar_and_stereo_depth(lidar_stixel_depths, stixel_positions, cam_params)
             #stixels_polygon = create_polygon_from_2d_points(stixels_2d_points)
             #stixels_3d_points = stixels.get_stixel_3d_points(cam_params)
-
-            
-            #membership_image = stixels.create_membership_image(disparity_img, depth_img, free_space_boundary, cam_params)
-            #normalized = (membership_image - membership_image.min()) / (membership_image.max() - membership_image.min())
         
-            
+            stixels.create_stixels_from_lidar_depth_image(lidar_depth_image, scanline_to_img_row, img_row_to_scanline, free_space_boundary)
 
-            #cost_image = stixels.create_cost_image(membership_image, disparity_img, free_space_boundary)
-            #normalized_cost = (cost_image - cost_image.min()) / (cost_image.max() - cost_image.min())
             #boundary, boundary_mask, _ = stixels.get_optimal_height(cost_image, depth_img, free_space_boundary)
             #boundary, boundary_mask = stixels.get_greedy_height(cost_image, free_space_boundary)
 
@@ -432,7 +425,7 @@ def main():
         #plot_stixel_img_without_column(image_with_stixels_and_free_space_boundary, rec_stixel_mask, 610)
 
 
-        #image_with_lidar = merge_lidar_onto_image(left_img, lidar_image_points)
+        image_with_lidar = merge_lidar_onto_image(left_img, lidar_image_points)
 
         #normalized_disparity = cv2.normalize(disparity_img, None, 0, 255, cv2.NORM_MINMAX)
         #normalized_disparity = normalized_disparity.astype(np.uint8)
@@ -440,9 +433,9 @@ def main():
         # Apply a colormap (optional)
         #colored_disparity = cv2.applyColorMap(normalized_disparity, cv2.COLORMAP_JET)
         
-        #cv2.imshow("Image with lidar", image_with_lidar)
+        cv2.imshow("Image with lidar", image_with_lidar)
         #cv2.imwrite("files/image_with_lidar.png", image_with_lidar)
-        cv2.imshow("Stixel image", image_with_stixels_and_filtered_lidar)
+        #cv2.imshow("Stixel image", image_with_stixels_and_filtered_lidar)
         #cv2.imwrite("files/stixel_image.png", image_with_stixels_and_filtered_lidar)
         #cv2.imshow("Water segmentation", water_img_with_free_space_boundary)
         #cv2.imshow("Depth image", depth_img.astype(np.uint8))

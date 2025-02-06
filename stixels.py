@@ -3,6 +3,7 @@ from shapely.geometry import Polygon
 from collections import deque
 import utilities as ut
 import cv2
+from plotting import *
 
 class Stixels:
 
@@ -213,7 +214,66 @@ class Stixels:
         self.rectangular_stixel_mask = rectangular_stixel_mask
         return self.rectangular_stixel_list, rectangular_stixel_mask
 
-    
+    def create_stixels_from_lidar_depth_image(self, lidar_depth_image, scanline_to_img_row, img_row_to_scanline, free_space_boundary):
+
+        height, width = lidar_depth_image.shape
+        scaling = 1
+
+        membership_image = np.zeros((height, width))
+
+        for u in range(width):
+            img_v_f = int(free_space_boundary[u])
+            v_f = img_row_to_scanline[img_v_f]
+            z_hat = lidar_depth_image[v_f, u]
+
+            for v in reversed(range(v_f)):
+                if lidar_depth_image[v, u] == np.nan:
+                    continue
+                if np.isnan(z_hat):
+                    z_hat = lidar_depth_image[v, u]
+                    continue
+
+                z_uv = lidar_depth_image[v, u]
+                exponent = 1 - ((z_uv - z_hat) / scaling)**2
+                membership_image[v, u] = 2**exponent - 1
+            
+            
+            #membership_image[v_f, u] = 1
+            lidar_depth_image[v_f, u] = 100
+
+        show_lidar_image(membership_image, "Membership Image")
+        show_lidar_image(lidar_depth_image, "LiDAR Depth Image")
+
+
+        cost_image = np.zeros((height, width))
+
+        top_boundary = np.zeros(width, dtype=int)
+        boundary_mask_greedy = np.zeros((height, width), dtype=int)   
+        
+        for u in range(width):
+            img_v_f = int(free_space_boundary[u])
+            v_f = img_row_to_scanline[img_v_f]
+
+            prefix = np.zeros(v_f + 2, dtype=np.float32)
+
+            for v in range(v_f + 1):
+                prefix[v + 1] = prefix[v] + membership_image[v, u]
+
+            for v in range(v_f + 1):
+                sum_above = prefix[v]
+                sum_below = prefix[v_f + 1] - prefix[v]
+                cost_image[v, u] = (sum_above - sum_below)
+
+            best_row = np.argmin(cost_image[:, u])
+            if best_row == 0:
+                best_row = v_f
+            top_boundary[u] = best_row
+            boundary_mask_greedy[best_row, u] = 1
+
+
+        #show_lidar_image(cost_image, "Cost Image")
+
+        #top_boundary, boundary_mask = self.get_optimal_height(cost_image, lidar_depth_image, free_space_boundary)
 
     def create_stixels(self, disparity_map, depth_map, free_space_boundary, cam_params):
         height, width = disparity_map.shape
@@ -239,7 +299,6 @@ class Stixels:
         normalized = (membership_image - membership_image.min()) / (membership_image.max() - membership_image.min())
 
         cost_image = np.zeros((height, width))
-        
 
         top_boundary = np.zeros(width, dtype=int)
         boundary_mask_greedy = np.zeros((height, width), dtype=int)   
@@ -289,51 +348,6 @@ class Stixels:
             rectangular_stixel_mask[stixel_top_height:stixel_base_height, stixel_range] = 1
 
         return self.rectangular_stixel_list, rectangular_stixel_mask, normalized, normalized_cost, boundary_mask, boundary_mask_greedy
-
-    
-    def create_membership_image(self, disparity_map, depth_map, free_space_boundary, cam_params):
-        height, width = disparity_map.shape
-        b = cam_params["b"]
-        fx = cam_params["fx"]
-        Delta_Z = 2 #2
-        membership_image = np.zeros((height, width))
-
-        for u in range(width):
-            v_f = int(free_space_boundary[u])
-            d_hat = disparity_map[v_f, u]
-            z_u = depth_map[v_f, u]
-            Delta_D = d_hat - (fx * b) / (z_u + Delta_Z)
-
-            for v in range(height):
-                d_uv = disparity_map[v, u]
-                exponent = 1 - ((d_uv - d_hat) / Delta_D)**2
-                membership_image[v, u] = 2**exponent - 1
-
-
-        return membership_image
-
-
-    def create_cost_image(self, membership_image, disparity_map, free_space_boundary):
-        height, width = disparity_map.shape
-
-        cost_image = np.zeros((height, width))
-        
-        for u in range(width):
-            v_f = int(free_space_boundary[u])
-            prefix = np.zeros(v_f + 2, dtype=np.float32)
-            
-
-            for v in range(v_f + 1):
-                prefix[v + 1] = prefix[v] + membership_image[v, u]
-
-            for v in range(v_f + 1):
-                sum_above = prefix[v]
-
-                sum_below = prefix[v_f + 1] - prefix[v]
-        
-                cost_image[v, u] = sum_above - sum_below
-
-        return cost_image
 
 
     def get_optimal_height(self, cost_image, depth_map, free_space_boundary):
@@ -399,64 +413,6 @@ class Stixels:
 
         return boundary, boundary_mask
 
-    
-
-    def get_optimal_height_2(self, cost_image, depth_map, free_space_boundary):
-        height, width = cost_image.shape
-        #    DP[i,j] = min cost of path that chooses row j in column i
-        DP = np.full((height, width), np.inf, dtype=float)
-        # track parent to reconstruct best boundary
-        parent = -1 * np.ones((height, width), dtype=int)
-        NZ = 5
-        Cs = 8
-
-        for v in range(height):
-            DP[v, 0] = cost_image[v, 0]
-
-        max_jump = 5
-        # Forward pass
-        for u in range(width - 1):
-            v_f = int(free_space_boundary[u])
-            v_f1  = int(free_space_boundary[u+1])
-            z_u   = depth_map[v_f, u]
-            z_u1  = depth_map[v_f1, u+1]
-            depth_diff = abs(z_u - z_u1)
-            relax_factor = max(0, 1 - depth_diff / NZ)  # (1 - |z_i - z_{i+1}| / N_Z)
-
-            for v0 in range(height):
-                lower = max(0, v0 - max_jump)
-                upper = min(height-1, v0 + max_jump)
-
-                for v1 in range(lower, upper+1):
-                    jump = abs(v0 - v1)
-                    Sij = Cs * jump * relax_factor
-
-                    edge_cost = cost_image[v1, u+1] + Sij
-                    new_cost = DP[v0, u] + edge_cost
-
-
-                    if new_cost > DP[v1, u+1]:
-                        DP[v1, u+1]    = new_cost
-                        parent[v1, u+1] = v0
-
-        best_end_v = np.argmin(DP[:,width-1])
-        best_cost  = DP[best_end_v, width-1]
-
-        # Backtrack to get the path of row indices
-        boundary = np.zeros(width, dtype=int)
-        boundary_mask = np.zeros((height, width), dtype=int)
-        boundary[width-1] = best_end_v
-
-        for u in reversed(range(width-1)):
-            boundary[u] = parent[boundary[u+1], u+1]
-        
-        for u in range(width):
-            v = boundary[u]
-            boundary_mask[v, u] = 1
-
-        
-
-        return boundary, boundary_mask, best_cost
     
     def get_greedy_height(self, cost_image, free_space_boundary):
 
@@ -647,8 +603,6 @@ class Stixels:
             stixel_disp = stixel[2]
 
             #print(f"Stixel {n}: top={stixel_top}, base={stixel_base}, width={stixel_width}")
-
-            
 
             if stixel_base > stixel_top and stixel_width > 0:
 

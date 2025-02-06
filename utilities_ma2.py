@@ -190,6 +190,7 @@ def gen_ma2_lidar_depth_image():
 
     IMAGE_WIDTH = 1920
     IMAGE_HEIGHT = 32  # This is fixed since we have 32 LiDAR rows
+    IMAGE_HEIGHT_CAMERA = 1080
 
     with Reader(ROSBAG_PATH) as reader:
         connections = [c for c in reader.connections if c.topic == LIDAR_TOPIC]
@@ -210,6 +211,9 @@ def gen_ma2_lidar_depth_image():
 
                 lidar_depth_image = np.full((IMAGE_HEIGHT, IMAGE_WIDTH), np.nan, dtype=np.float32)
 
+                scanline_to_img_row = np.full(IMAGE_HEIGHT, -1, dtype=int)
+                img_row_to_scanline = np.full(IMAGE_HEIGHT_CAMERA, -1, dtype=int)
+
                 for row_idx in range(IMAGE_HEIGHT):
                     row_points = xyz_c_reshaped[row_idx]
                     image_points, _ = cv2.projectPoints(row_points, rvec, tvec, K, distCoeff)
@@ -221,12 +225,13 @@ def gen_ma2_lidar_depth_image():
                     
                     inside_indices = np.array([i for i, pt in enumerate(image_points_forward) if image_polygon.contains(Point(pt))], dtype=int)
 
-
                     row_filtered_image_points = image_points_forward[inside_indices]
                     row_filtered_xyz_c = row_points_forward[inside_indices]
 
                     if row_filtered_image_points.shape[0] == 0:
                         continue  # Skip if no valid points in this row
+
+                    scanline_to_img_row[row_idx] = int(np.nanmedian(row_filtered_image_points[:,1]))
 
                     # Normalize x-coordinates to range [0, 1920]
                     col_indices = np.clip((row_filtered_image_points[:, 0] / width) * IMAGE_WIDTH, 0, IMAGE_WIDTH - 1).astype(int)
@@ -235,9 +240,19 @@ def gen_ma2_lidar_depth_image():
                         depth = row_filtered_xyz_c[i, 2]  # Use Z (depth)
                         if np.isnan(lidar_depth_image[row_idx, col]) or depth < lidar_depth_image[row_idx, col]:
                             lidar_depth_image[row_idx, col] = depth  # Keep closest point
+                    
+                valid_mask = scanline_to_img_row >= 0
+                if not np.any(valid_mask):
+                    raise ValueError("No valid scanlines available for mapping!")
+                valid_scanline_indices = np.where(valid_mask)[0]
+                valid_scanline_img_rows = scanline_to_img_row[valid_mask]
 
+                all_img_rows = np.arange(IMAGE_HEIGHT_CAMERA)
+                differences = np.abs(all_img_rows[:, None] - valid_scanline_img_rows[None, :])
+                nearest_valid_idx = np.argmin(differences, axis=1)
+                img_row_to_scanline = valid_scanline_indices[nearest_valid_idx]
 
-                yield timestamp, lidar_depth_image
+                yield timestamp, lidar_depth_image, scanline_to_img_row, img_row_to_scanline
 
 
 
