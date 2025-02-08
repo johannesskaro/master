@@ -179,11 +179,7 @@ def main():
         left_img = next_svo_image
         lidar_image_points = np.squeeze(next_ma2_lidar_points, axis=1)  # From (N, 1, 2) to (N, 2)
         lidar_3d_points = xyz_c
-
-
-        #print(img_row_to_scanline)
-        #print(scanline_to_img_row)
-        
+                
 
         (H, W, D) = left_img.shape
 
@@ -194,6 +190,8 @@ def main():
         rwps_mask_3d = rwps_mask_3d.astype(int)
 
         water_mask = np.zeros_like(depth_img)
+
+
 
         # FastSAM classifier
         if mode == "fastsam":
@@ -306,14 +304,13 @@ def main():
 
         if create_rectangular_stixels:
             
-            rec_stixel_list, rec_stixel_mask = stixels.create_rectangular_stixels_2(water_mask, disparity_img, depth_img)
-            
+            rec_stixel_list, rec_stixel_mask = stixels.create_rectangular_stixels_3(water_mask, disparity_img, depth_img)
             
             #rec_stixel_list = stixels.smooth_stixel_tops_by_depth(disparity_img, depth_img)
             #cv2.imshow("Rectangular Stixels", rectangular_stixel_mask.astype(np.uint8) * 255)
             free_space_boundary, free_space_boundary_mask = stixels.get_free_space_boundary(water_mask)
-            #rec_stixel_list, rec_stixel_mask, membership_image, normalized_cost, boundary_mask, boundary_mask_greedy = stixels.create_stixels(disparity_img, depth_img, free_space_boundary, cam_params) 
-            
+            #rec_stixel_list, rec_stixel_mask = stixels.create_stixels(disparity_img, depth_img, free_space_boundary, cam_params) 
+
 
             stixel_mask, stixel_positions = stixels.get_stixels_base(water_mask)
 
@@ -323,17 +320,7 @@ def main():
             #stixels_polygon = create_polygon_from_2d_points(stixels_2d_points)
             #stixels_3d_points = stixels.get_stixel_3d_points(cam_params)
         
-            stixels.create_stixels_from_lidar_depth_image(lidar_depth_image, scanline_to_img_row, img_row_to_scanline, free_space_boundary)
-
-            #boundary, boundary_mask, _ = stixels.get_optimal_height(cost_image, depth_img, free_space_boundary)
-            #boundary, boundary_mask = stixels.get_greedy_height(cost_image, free_space_boundary)
-
-            #cv2.imshow("Membership", membership_image)
-            #cv2.imshow("normilized cost", normalized_cost)
-            #cv2.imshow("Boundary", boundary_mask.astype(np.uint8)*255)
-            #cv2.imshow("Stixels", rec_stixel_mask.astype(np.uint8) * 255)
-
-            #cv2.imshow("Boundary greedy", boundary_mask_greedy.astype(np.uint8)*255)
+            #rec_stixel_list = stixels.create_stixels_from_lidar_depth_image_2(lidar_depth_image, scanline_to_img_row, img_row_to_scanline, free_space_boundary)
 
         if create_polygon:    
             stixel_mask, stixel_positions = stixels.get_stixels_base(water_mask)
@@ -406,8 +393,8 @@ def main():
 
         image_with_stixels = stixels.merge_stixels_onto_image(rec_stixel_list, left_img)
         #image_with_stixels_2 = stixels.merge_stixels_onto_image(rec_stixel_list, left_img_contrastreduced)
-        image_with_stixels_and_filtered_lidar = merge_lidar_onto_image(image_with_stixels, filtered_lidar_points)
-
+        #image_with_stixels_and_filtered_lidar = merge_lidar_onto_image(image_with_stixels, filtered_lidar_points)
+        #image_with_stixels_and_lidar = merge_lidar_onto_image(image_with_stixels, lidar_image_points)
         
 
         #water_img_with_free_space_boundary = ut.blend_image_with_mask(
@@ -425,15 +412,14 @@ def main():
         #plot_stixel_img_without_column(image_with_stixels_and_free_space_boundary, rec_stixel_mask, 610)
 
 
-        image_with_lidar = merge_lidar_onto_image(left_img, lidar_image_points)
-
-        #normalized_disparity = cv2.normalize(disparity_img, None, 0, 255, cv2.NORM_MINMAX)
-        #normalized_disparity = normalized_disparity.astype(np.uint8)
+        #image_with_lidar = merge_lidar_onto_image(left_img, lidar_image_points)
 
         # Apply a colormap (optional)
         #colored_disparity = cv2.applyColorMap(normalized_disparity, cv2.COLORMAP_JET)
+
         
-        cv2.imshow("Image with lidar", image_with_lidar)
+        #cv2.imshow("Image with lidar", image_with_stixels_and_lidar)
+        cv2.imshow("Image with stixels", image_with_stixels)    
         #cv2.imwrite("files/image_with_lidar.png", image_with_lidar)
         #cv2.imshow("Stixel image", image_with_stixels_and_filtered_lidar)
         #cv2.imwrite("files/stixel_image.png", image_with_stixels_and_filtered_lidar)
@@ -449,8 +435,9 @@ def main():
 
         if save_video:
             #out.write(water_img)
-            out.write(image_with_stixels_and_filtered_lidar)
+            #out.write(image_with_stixels_and_filtered_lidar)
             #out.write(water_img_with_free_space_boundary)
+            pass
 
         key = cv2.waitKey(10)
 
