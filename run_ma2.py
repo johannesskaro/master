@@ -39,7 +39,7 @@ save_3d_visualization_video = False
 
 dataset = "ma2"
 sequence = "scen4_2"
-mode = "fastsam" #"fastsam" #"rwps" #"fusion"
+mode = "fusion" #"fastsam" #"rwps" #"fusion"
 iou_threshold = 0.1
 fastsam_model_path = "weights/FastSAM-x.pt"
 device = "cuda"
