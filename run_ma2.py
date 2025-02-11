@@ -39,7 +39,7 @@ save_3d_visualization_video = False
 
 dataset = "ma2"
 sequence = "scen4_2"
-mode = "fusion" #"fastsam" #"rwps" #"fusion"
+mode = "fastsam" #"fastsam" #"rwps" #"fusion"
 iou_threshold = 0.1
 fastsam_model_path = "weights/FastSAM-x.pt"
 device = "cuda"
@@ -314,8 +314,8 @@ def main():
 
             stixel_mask, stixel_positions = stixels.get_stixels_base(water_mask)
 
-            filtered_lidar_points, filtered_lidar_3d_points, lidar_stixel_indices = stixels.filter_lidar_points_by_stixels(lidar_image_points, lidar_3d_points)
-            lidar_stixel_depths = stixels.get_stixel_depth_from_lidar_points(filtered_lidar_3d_points, lidar_stixel_indices)
+            #filtered_lidar_points, filtered_lidar_3d_points, lidar_stixel_indices = stixels.filter_lidar_points_by_stixels(lidar_image_points, lidar_3d_points)
+            #lidar_stixel_depths = stixels.get_stixel_depth_from_lidar_points(filtered_lidar_3d_points, lidar_stixel_indices)
             #stixels_2d_points = stixels.get_polygon_points_from_lidar_and_stereo_depth(lidar_stixel_depths, stixel_positions, cam_params)
             #stixels_polygon = create_polygon_from_2d_points(stixels_2d_points)
             #stixels_3d_points = stixels.get_stixel_3d_points(cam_params)
