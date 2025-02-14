@@ -53,7 +53,7 @@ plt.ion()
 if save_video:
     fourcc = cv2.VideoWriter_fourcc(*"MP4V")  # You can also use 'MP4V' for .mp4 format
     out = cv2.VideoWriter(
-        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_badino_stixels.mp4",
+        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_improved_stixels_v14.mp4",
         fourcc,
         FPS,
         (W, H),
@@ -62,7 +62,7 @@ if save_video:
 if save_polygon_video:
     fourcc = cv2.VideoWriter_fourcc(*"MP4V")  # You can also use 'MP4V' for .mp4 format
     out_polygon = cv2.VideoWriter(
-        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_polygon_BEV.mp4",
+        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_polygon_BEV_improved_stixels_v14.mp4",
         fourcc,
         FPS,
         (H, H),
@@ -71,7 +71,7 @@ if save_polygon_video:
 if save_3d_visualization_video:
     fourcc = cv2.VideoWriter_fourcc(*"MP4V")  # You can also use 'MP4V' for .mp4 format
     out_3d_visualization = cv2.VideoWriter(
-        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_3d_visualization_v3.mp4",
+        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_3d_visualization_v14.mp4",
         fourcc,
         FPS,
         (1280, 720),
@@ -124,7 +124,7 @@ def main():
                 try:
                     next_ma2_timestamp, next_ma2_lidar_points, intensity, xyz_c = next(gen_lidar)
                     current_timestamp = next_ma2_timestamp
-                    _, lidar_depth_image, scanline_to_img_row, img_row_to_scanline = next(gen_lidar_in_image)
+                    #_, lidar_depth_image, scanline_to_img_row, img_row_to_scanline = next(gen_lidar_in_image)
                 except StopIteration:
                     iterating = False
                     next_ma2_timestamp = None
@@ -148,7 +148,7 @@ def main():
             try:
                 next_ma2_timestamp, next_ma2_lidar_points, intensity, xyz_c = next(gen_lidar)
                 current_timestamp = next_ma2_timestamp
-                _, lidar_depth_image, scanline_to_img_row, img_row_to_scanline = next(gen_lidar_in_image)
+                #_, lidar_depth_image, scanline_to_img_row, img_row_to_scanline = next(gen_lidar_in_image)
             except StopIteration:
                 iterating = False
                 next_ma2_timestamp = None
@@ -179,7 +179,17 @@ def main():
         left_img = next_svo_image
         lidar_image_points = np.squeeze(next_ma2_lidar_points, axis=1)  # From (N, 1, 2) to (N, 2)
         lidar_3d_points = xyz_c
-                
+
+        #sam_masks = fastsam.get_all_masks(left_img, device=device)
+        #plot_sam_masks_cv2(left_img, sam_masks)
+
+        sam_contours = fastsam.get_all_countours(left_img, device=device)
+        #cv2.imshow("SAM countours", sam_contours)
+        #sam_contours = fastsam.get_bottom_contours(sam_contours)
+        #cv2.imshow("Bottom countours", sam_contours)
+
+        #horizontal_contours = fastsam.get_horizontal_contours(left_img, device=device)
+        #cv2.imshow("Horizontal SAM countours", horizontal_contours) 
 
         (H, W, D) = left_img.shape
 
@@ -304,7 +314,7 @@ def main():
 
         if create_rectangular_stixels:
             
-            rec_stixel_list, rec_stixel_mask = stixels.create_rectangular_stixels_3(water_mask, disparity_img, depth_img)
+            rec_stixel_list, rec_stixel_mask = stixels.create_rectangular_stixels_3(water_mask, disparity_img, depth_img, sam_contours)
             
             #rec_stixel_list = stixels.smooth_stixel_tops_by_depth(disparity_img, depth_img)
             #cv2.imshow("Rectangular Stixels", rectangular_stixel_mask.astype(np.uint8) * 255)
@@ -314,11 +324,11 @@ def main():
 
             stixel_mask, stixel_positions = stixels.get_stixels_base(water_mask)
 
-            #filtered_lidar_points, filtered_lidar_3d_points, lidar_stixel_indices = stixels.filter_lidar_points_by_stixels(lidar_image_points, lidar_3d_points)
-            #lidar_stixel_depths = stixels.get_stixel_depth_from_lidar_points(filtered_lidar_3d_points, lidar_stixel_indices)
-            #stixels_2d_points = stixels.get_polygon_points_from_lidar_and_stereo_depth(lidar_stixel_depths, stixel_positions, cam_params)
-            #stixels_polygon = create_polygon_from_2d_points(stixels_2d_points)
-            #stixels_3d_points = stixels.get_stixel_3d_points(cam_params)
+            filtered_lidar_points, filtered_lidar_3d_points, lidar_stixel_indices = stixels.filter_lidar_points_by_stixels(lidar_image_points, lidar_3d_points)
+            lidar_stixel_depths = stixels.get_stixel_depth_from_lidar_points(filtered_lidar_3d_points, lidar_stixel_indices)
+            stixels_2d_points = stixels.get_polygon_points_from_lidar_and_stereo_depth(lidar_stixel_depths, stixel_positions, cam_params)
+            stixels_polygon = create_polygon_from_2d_points(stixels_2d_points)
+            stixels_3d_points = stixels.get_stixel_3d_points(cam_params)
         
             #rec_stixel_list = stixels.create_stixels_from_lidar_depth_image_2(lidar_depth_image, scanline_to_img_row, img_row_to_scanline, free_space_boundary)
 
@@ -337,6 +347,13 @@ def main():
             plt.draw()
             plt.pause(0.5)
             plt.close()
+
+            #bev_image = np.zeros((height, width, 3), dtype=np.uint8)
+            #polygon_points = np.array(stixels_polygon.exterior.coords, dtype=np.int32)
+            #polygon_points = polygon_points.reshape((-1, 1, 2))
+            #cv2.polylines(bev_image, [polygon_points], isClosed=True, color=(0, 255, 0), thickness=2)
+            #cv2.fillPoly(bev_image, [polygon_points], color=(0, 255, 0))
+            #cv2.imshow("Polygon", bev_image)
 
         if save_polygon_video:
 
@@ -373,8 +390,8 @@ def main():
             fig = plt.figure(figsize=(1280/dpi, 720/dpi), dpi=dpi)
             ax = fig.add_subplot(111, projection='3d')
             ax.set_proj_type('persp', focal_length=0.2) 
-            azim = 0 + 3 * np.sin(np.radians(curr_frame * 2))  # Azimuth changes within a 10-15 degree range
-            elev = 20 + 10 * np.sin(np.radians(curr_frame * 1))  # Elevation changes within a 13-17 degree range
+            azim = 0 #+ 3 * np.sin(np.radians(curr_frame * 2))  # Azimuth changes within a 10-15 degree range
+            elev = 20 #+ 10 * np.sin(np.radians(curr_frame * 1))  # Elevation changes within a 13-17 degree range
             camera_position = (elev, azim)
             plot_scene(ax, stixels_3d_points.tolist(), stixels_2d_points, plane_params_3d, camera_position)
                 
@@ -393,8 +410,9 @@ def main():
 
         image_with_stixels = stixels.merge_stixels_onto_image(rec_stixel_list, left_img)
         #image_with_stixels_2 = stixels.merge_stixels_onto_image(rec_stixel_list, left_img_contrastreduced)
-        #image_with_stixels_and_filtered_lidar = merge_lidar_onto_image(image_with_stixels, filtered_lidar_points)
+        image_with_stixels_and_filtered_lidar = merge_lidar_onto_image(image_with_stixels, filtered_lidar_points)
         #image_with_stixels_and_lidar = merge_lidar_onto_image(image_with_stixels, lidar_image_points)
+        #image_with_lidar = merge_lidar_onto_image(left_img, lidar_image_points)
         
 
         #water_img_with_free_space_boundary = ut.blend_image_with_mask(
@@ -419,9 +437,10 @@ def main():
 
         
         #cv2.imshow("Image with lidar", image_with_stixels_and_lidar)
-        cv2.imshow("Image with stixels", image_with_stixels)    
+        #cv2.imshow("Image with stixels", image_with_stixels)    
         #cv2.imwrite("files/image_with_lidar.png", image_with_lidar)
-        #cv2.imshow("Stixel image", image_with_stixels_and_filtered_lidar)
+        cv2.imshow("Stixel image", image_with_stixels_and_filtered_lidar)
+        #cv2.imshow("Image with LiDAR", image_with_lidar)
         #cv2.imwrite("files/stixel_image.png", image_with_stixels_and_filtered_lidar)
         #cv2.imshow("Water segmentation", water_img_with_free_space_boundary)
         #cv2.imshow("Depth image", depth_img.astype(np.uint8))

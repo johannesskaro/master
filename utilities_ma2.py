@@ -33,9 +33,9 @@ from python_tools.stereo_svo import SVOCamera
 SVO_FILE_PATH = r"C:\Users\johro\Documents\2023-07-11_Multi_ZED_Summer\ZED camera svo files\2023-07-11_12-20-43_28170706_HD1080_FPS15.svo" #right zed 
 #SVO_FILE_PATH = r"C:\Users\johro\Documents\2023-07-11_Multi_ZED_Summer\ZED camera svo files\2023-07-11_12-20-43_5256916_HD1080_FPS15.svo" #left zed
 ROSBAG_NAME = "scen4_2"
-START_TIMESTAMP = 1689070899731613030 + 15500000000
+START_TIMESTAMP = 1689070899731613030 + 14000000000
 #START_TIMESTAMP = 1689070888907352002# Starting to see kayak
-#START_TIMESTAMP = 1689070910831613030 #Docking
+#START_TIMESTAMP = 1689070920831613030 #Docking
 ma2_clap_timestamps = np.array([1689070864130009197, 1689070865931143443, 1689070867729428949, 1689070870332243623, 1689070872330384680])
 svo_clap_timestamps = np.array([1689070864415441257, 1689070866090016257, 1689070867898886257, 1689070870444290257, 1689070872386914257]) 
 
@@ -138,7 +138,7 @@ baseline = np.linalg.norm(T)
 width, height = 1920, 1080
 
 def gen_svo_images():
-    num_frames = 275
+    num_frames = 200 # 275
     curr_frame = 0
     while stereo_cam.grab() == sl.ERROR_CODE.SUCCESS and curr_frame < num_frames:
         image = stereo_cam.get_left_image(should_rectify=True)

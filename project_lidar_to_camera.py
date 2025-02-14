@@ -43,7 +43,7 @@ def transform_lidar_to_camera_frame(R_IMU_TO_LIDAR, t_IMU_TO_LIDAR, R_IMU_TO_CAM
     # print(f"{timestamp}")
     #cv2.waitKey(10)
 
-    return image_points_forward
+    return image_points_forward, points_c
 
 
 def merge_lidar_onto_image(image, lidar_points, intensities=None, point_size=2, max_value=None, min_value=None):
@@ -65,7 +65,7 @@ def merge_lidar_onto_image(image, lidar_points, intensities=None, point_size=2, 
     - image_with_lidar: The image with lidar points overlaid.
     """
 
-    if intensities is not None:
+    if intensities is not None and len(intensities.shape) == 2:
         intensities = np.squeeze(intensities, axis=1)  # From (N, 1) to (N,)
 
     image_with_lidar = image.copy()

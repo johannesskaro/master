@@ -62,7 +62,12 @@ def create_filling_stixels(stixels_3d_points):
             continue
         if np.abs(stixel[0][0] - stixels_3d_points[n-1][1][0]) > 2.5: #Check if there is a too large gap between stixels
             continue
+
+        #if np.isnan(stixel).any():
+         #   gap_rectangle = create_gap_rectangle(stixels_3d_points[n-1], stixels_3d_points[min(n+1, len(stixels_3d_points)-1)])
+        #else:
         gap_rectangle = create_gap_rectangle(stixels_3d_points[n-1], stixel)
+
         stixels_with_gaps.insert(n, gap_rectangle)
 
     return stixels_with_gaps
@@ -146,7 +151,13 @@ def plot_scene(ax, stixel_3d_points, water_surface_polygon_points, plane_params,
     # Set plot limits
     ax.set_xlim(20, 0)
     ax.set_ylim(-10, 10)
-    ax.set_zlim(-1, 5)
+    ax.set_zlim(-1, 8)
+
+#    ax.set_xlim(10, 0)
+#    ax.set_ylim(-5, 5)
+#    ax.set_zlim(-1, 5)
+
+
 
     ax.grid(False)
     ax._axis3don = False  # Hide the 3D axis lines

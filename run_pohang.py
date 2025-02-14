@@ -16,6 +16,8 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 from temporal_smoothing import TemporalSmoothing
 from project_lidar_to_camera import *
+import lidar_image
+from plotting import *
 
 #matplotlib.use('Agg')
 
@@ -29,25 +31,27 @@ create_polygon = False
 plot_polygon = False
 save_polygon_video = False
 create_rectangular_stixels = True
-use_temporal_smoothing = False
-use_temporal_smoothing_ego_motion_compensation = True
+use_temporal_smoothing = True
+use_temporal_smoothing_ego_motion_compensation = False
 visualize_ego_motion_compensation = True
+
+
 mode = "fastsam" #"fastsam" #"rwps"
 iou_threshold = 0.1
 fastsam_model_path = "weights/FastSAM-x.pt"
 device = "mps"
-dataset_dir = "/Users/johannesskaro/Documents/KYB 5.år/Datasets/pohang"
+dataset_dir = r"C:\Users\johro\Documents\pohang"
 onedrive_dir = "/Users/johannesskaro/OneDrive - NTNU/autumn-2023"
-src_dir = "/Users/johannesskaro/Documents/KYB 5.år/fusedWSS"
-sequence = "pohang00_pier" #"pohang00_port"
+src_dir = r"C:\Users\johro\Documents\BB-Perception\master"
+sequence = "\pohang00_pier" #"pohang00_port"
 
 
 W, H = (2048, 1080)
 
-basepath = f"{dataset_dir}/{sequence}/"
-basepath_images = basepath + "stereo/"
-left_image_path = f"{basepath_images}/left_images"
-right_image_path = f"{basepath_images}/right_images"
+basepath = f"{dataset_dir}{sequence}\\"
+basepath_images = basepath + "stereo\\"
+left_image_path = f"{basepath_images}left_images"
+right_image_path = f"{basepath_images}right_images"
 
 unsorted_image_files = [
     f
@@ -55,16 +59,16 @@ unsorted_image_files = [
     if os.path.isfile(os.path.join(left_image_path, f))
 ]
 image_files = sorted(unsorted_image_files, key=lambda x: int(x[:6]))
-image_timestamps_file = basepath + "stereo/timestamp.txt"
+image_timestamps_file = basepath + "stereo\\timestamp.txt"
 image_timestamps = pohang_2_extract_camera_timstamps(image_timestamps_file)
 
-extrinsics_file = basepath + "calibration/extrinsics.json"
-intrinsics_file = basepath + "calibration/intrinsics.json"
+extrinsics_file = basepath + "calibration\\extrinsics.json"
+intrinsics_file = basepath + "calibration\\intrinsics.json"
 intrinsics_json, extrinsics_json = ut.load_intrinsics_and_extrinsics(intrinsics_file, extrinsics_file)
 intrinsics, extrinsics, t_ahrs_to_camera, R_ahrs_to_camera, R_ahrs_to_lidar, t_ahrs_to_lidar = pohang_2_intrinsics_extrinsics(intrinsics_json, extrinsics_json)
 
 lidar_dtype=[('x', np.float32), ('y', np.float32), ('z', np.float32), ('intensity', np.float32), ('time', np.uint32), ('reflectivity', np.uint16), ('ambient', np.uint16), ('range', np.uint32)]
-lidar_data_path = f"{basepath}/lidar/lidar_front/points/"
+lidar_data_path = f"{basepath}\\lidar\\lidar_front\\points\\"
 unsorted_lidar_data = [
     f
     for f in os.listdir(lidar_data_path)
@@ -79,7 +83,7 @@ W = intrinsics["stereo_left"]["image_width"]
 # import IMU data
 
 ahrs_data_folder = (
-    f"{basepath}/navigation/ahrs.txt"
+    f"{basepath}\\navigation\\ahrs.txt"
 )
 ahrs_data_unmatched = pohang_2_extract_roll_pitch_yaw(ahrs_data_folder)
 ahrs_data = ut.pohang_2_match_ahrs_timestamps(image_timestamps, ahrs_data_unmatched)
@@ -113,7 +117,7 @@ rwps3d = RWPS()
 stixels = Stixels()
 temporal_smoothing = TemporalSmoothing(5, KL, R_ahrs_to_camera, t_ahrs_to_camera)
 
-config_rwps = f"{src_dir}/rwps_config.json"
+config_rwps = f"{src_dir}\\rwps_config.json"
 p1 = (102, 22)
 p2 = (102, 639)
 invalid_depth_mask = rwps3d.set_invalid(p1, p2, shape=(H - 1, W))
@@ -155,22 +159,28 @@ while curr_frame < num_frames - 1:
     image_number = image_timestamps[curr_frame][1]
     ahrs_data_timestamp = ahrs_data[curr_frame][0]
 
-    left_image_path = f"{basepath_images}/left_images/{image_number}.png"
-    right_image_path = f"{basepath_images}/right_images/{image_number}.png"
+    left_image_path = f"{basepath_images}\\left_images\\{image_number}.png"
+    right_image_path = f"{basepath_images}\\right_images\\{image_number}.png"
 
     #print(f"Image timestamp: {image_timestamp}")
     #print(f"Ahrs data timestamp: {ahrs_data_timestamp}")
-
+    
 
     left_img = cv2.imread(left_image_path)
     right_img = cv2.imread(right_image_path)
     orientation = ahrs_data[curr_frame][1:]
 
+    sam_contours = fastsam.get_all_countours(left_img, device=device)
+
     scan_path = f"{lidar_data_path}/{lidar_data[curr_frame]}"
     scan = np.fromfile(scan_path, dtype=lidar_dtype)
     points = np.stack((scan['x'], scan['y'], scan['z']), axis=-1)
     intensity = scan['intensity']
-    lidar_points_c = transform_lidar_to_camera_frame(R_ahrs_to_lidar, t_ahrs_to_lidar, R_ahrs_to_camera, t_ahrs_to_camera, KL, points, intensity)
+    lidar_points_c, xyz_c = transform_lidar_to_camera_frame(R_ahrs_to_lidar, t_ahrs_to_lidar, R_ahrs_to_camera, t_ahrs_to_camera, KL, points, intensity)
+    lidar_points_c = np.squeeze(lidar_points_c, axis=1)
+
+    lidar_depth_image, scanline_to_img_row, img_row_to_scanline = lidar_image.create_lidar_depth_image(xyz_c, KL)
+    show_lidar_image(lidar_depth_image)
     #ut.visualize_lidar_points(points)
 
     disparity_img = stereo.get_disparity(
@@ -314,7 +324,7 @@ while curr_frame < num_frames - 1:
         water_img, blue_water_mask, [255, 100, 0], alpha1=1, alpha2=0.5
     )
 
-    lidar_water_mask_image = merge_lidar_onto_image(water_img, lidar_points_c, intensity)
+    
 
     if show_horizon:
         cv2.line(
@@ -326,25 +336,34 @@ while curr_frame < num_frames - 1:
         )
 
     if create_rectangular_stixels:
-        rectangular_stixel_mask = stixels.create_rectangular_stixels(water_mask, disparity_img)
-        cv2.imshow("Rectangular Stixels", rectangular_stixel_mask.astype(np.uint8) * 255)
+        
+        #rec_stixel_list, rec_stixel_mask = stixels.create_rectangular_stixels_3(water_mask, disparity_img, depth_img, sam_contours)
+        
+        #rec_stixel_list = stixels.smooth_stixel_tops_by_depth(disparity_img, depth_img)
+        #cv2.imshow("Rectangular Stixels", rectangular_stixel_mask.astype(np.uint8) * 255)
+        free_space_boundary, free_space_boundary_mask = stixels.get_free_space_boundary(water_mask)
+        #rec_stixel_list, rec_stixel_mask = stixels.create_stixels(disparity_img, depth_img, free_space_boundary, cam_params) 
 
 
-    if create_polygon:    
         stixel_mask, stixel_positions = stixels.get_stixels_base(water_mask)
-        stixel_width = stixels.get_stixel_width(W)
-        stixels_2d_points = calculate_2d_points_from_stixel_positions(stixel_positions, stixel_width, depth_img, cam_params)
-        stixels_polygon = create_polygon_from_2d_points(stixels_2d_points)
 
-        cv2.imshow("Stixels", stixel_mask.astype(np.uint8) * 255)
+        filtered_lidar_points, filtered_lidar_3d_points, lidar_stixel_indices = stixels.filter_lidar_points_by_stixels(lidar_points_c, points)
+        #lidar_stixel_depths = stixels.get_stixel_depth_from_lidar_points(filtered_lidar_3d_points, lidar_stixel_indices)
+        #stixels_2d_points = stixels.get_polygon_points_from_lidar_and_stereo_depth(lidar_stixel_depths, stixel_positions, cam_params)
+        #stixels_polygon = create_polygon_from_2d_points(stixels_2d_points)
+        #stixels_3d_points = stixels.get_stixel_3d_points(cam_params)
+    
+        rec_stixel_list = stixels.create_stixels_from_lidar_depth_image_2(lidar_depth_image, scanline_to_img_row, img_row_to_scanline, free_space_boundary)
+        stixels_polygon = False
 
-    if plot_polygon:
 
-        myPoly = gpd.GeoSeries([stixels_polygon])
-        myPoly.plot()
-        plt.draw()
-        plt.pause(0.5)
-        plt.close()
+    image_with_stixels = stixels.merge_stixels_onto_image(rec_stixel_list, left_img)
+    lidar_water_mask_image = merge_lidar_onto_image(image_with_stixels, lidar_points_c)
+
+    #cv2.imshow("Water Segmentation", water_img)
+    #cv2.imshow("Depth", depth_img.astype(np.uint8))
+    cv2.imshow("Lidar Water Mask", lidar_water_mask_image)
+
 
     if save_polygon_video:
 
@@ -366,9 +385,8 @@ while curr_frame < num_frames - 1:
     if save_video:
         #out.write(water_img)
         out.write(lidar_water_mask_image)
-    #cv2.imshow("Water Segmentation", water_img)
-    cv2.imshow("Depth", depth_img.astype(np.uint8))
-    cv2.imshow("Lidar Water Mask", lidar_water_mask_image)
+
+
     key = cv2.waitKey(10)
 
     if key == 27:  # Press ESC to exit

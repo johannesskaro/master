@@ -95,4 +95,84 @@ class FastSAMSeg:
             masks = np.array([])
         return masks
     
+    def get_all_countours(self, img: np.array, device: str = 'cuda', min_area=5000) -> np.array:
+        """
+        Obtain all contours for the input image.
+
+        Parameters:
+        - img (np.array): Input image.
+        - device (str): Device to run the model on, e.g., 'cuda'.
+
+        Returns:
+        - np.array: Contours result.
+        """
+        masks = self.get_all_masks(img, device=device)
+        contour_mask = np.zeros((img.shape[0], img.shape[1]))
+
+        for mask in masks:
+            mask = (mask > 0).astype(np.uint8)
+            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+            for contour in contours:
+                if cv2.contourArea(contour) >= min_area:
+                    cv2.drawContours(contour_mask, [contour], -1, 255, thickness=1)
+
+        return contour_mask
+    
+    def get_bottom_contours(self, contour_mask) -> np.array:
+        height, width = contour_mask.shape
+        result_mask = np.zeros_like(contour_mask, dtype=np.uint8)
+
+        reversed_mask = (contour_mask[::-1, :] > 0)
+
+        first_idx = np.argmax(reversed_mask, axis=0)
+        has_nonzero = np.any(reversed_mask, axis=0)
+        row_indices = np.where(has_nonzero, height - 1 - first_idx, -1)
+        cols = np.arange(width)
+        valid = row_indices >= 0
+        result_mask[row_indices[valid], cols[valid]] = 1
+        return result_mask
+
+    
+    def get_horizontal_contours(self, img: np.array, device: str = 'cuda', min_area=3000, angle_threshold=10) -> np.array:
+
+        masks = self.get_all_masks(img, device=device)
+        H, W = img.shape[1], img.shape[2]
+        horizontal_mask = np.zeros((H, W), dtype=np.uint8)
+
+        for mask in masks:
+            mask_bin = (mask > 0).astype(np.uint8) * 255
+            contours, _ = cv2.findContours(mask_bin, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            for contour in contours:
+                if cv2.contourArea(contour) < min_area:
+                    continue
+
+                # Approximate contour to reduce the number of points
+                epsilon = 0.01 * cv2.arcLength(contour, True)
+                approx = cv2.approxPolyDP(contour, epsilon, True)
+
+                # Iterate through line segments in the approximated contour
+                for i in range(len(approx)):
+                    pt1 = approx[i][0]
+                    pt2 = approx[(i + 1) % len(approx)][0]  # Wrap-around to the first point
+
+                    # Compute the difference in x and y
+                    dx = pt2[0] - pt1[0]
+                    dy = pt2[1] - pt1[1]
+
+                    if dx == 0:
+                        continue
+
+                    # Calculate the angle in degrees
+                    angle = np.degrees(np.arctan2(dy, dx))
+
+                    # Normalize angle to the range [0, 180)
+                    angle = abs(angle) % 180
+
+                    # Check if the line is near-horizontal
+                    if angle <= angle_threshold or angle >= (180 - angle_threshold):
+                        cv2.line(horizontal_mask, tuple(pt1), tuple(pt2), 255, thickness=1)
+
+        return horizontal_mask
+    
     
