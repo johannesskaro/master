@@ -119,6 +119,50 @@ class FastSAMSeg:
 
         return contour_mask
     
+    def get_all_upper_countours(self, img: np.array, device: str = 'cuda', min_area=3000) -> np.array:
+        masks = self.get_all_masks(img, device=device)
+        combined_upper = np.zeros((img.shape[0], img.shape[1]), dtype=np.uint8)
+
+        for mask in masks:
+            # Ensure binary mask
+            bin_mask = (mask > 0).astype(np.uint8)
+            # Optionally, you can use cv2.findContours to filter out small regions
+            contours, _ = cv2.findContours(bin_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            valid = False
+            for contour in contours:
+                if cv2.contourArea(contour) >= min_area:
+                    valid = True
+                    break
+            if not valid:
+                continue
+
+            # Extract the upper contour line from this mask.
+            upper_line = self.get_upper_contour_line(bin_mask)
+            # Optionally, you can also draw the original contour:
+            # cv2.drawContours(upper_line, [contour], -1, 255, thickness=1)
+
+            # Combine the upper contour line with previous ones.
+            combined_upper = cv2.bitwise_or(combined_upper, upper_line)
+
+        return combined_upper
+    
+    def get_upper_contour_line(self, mask) -> np.array:
+        has_nonzero = mask.any(axis=0)  # shape: (W,)
+        
+        # For each column, np.argmax returns the index of the first occurrence of the maximum value.
+        # For a binary mask (0 or 1), this gives the first nonzero pixel. Note that for columns
+        # with all zeros, np.argmax returns 0 even though no pixel is nonzero.
+        first_nonzero_indices = np.argmax(mask, axis=0)  # shape: (W,)
+        
+        # Create the result mask (initialize with zeros)
+        result_mask = np.zeros_like(mask, dtype=np.uint8)
+        
+        # Only update the columns that have at least one nonzero pixel.
+        valid_cols = np.where(has_nonzero)[0]
+        result_mask[first_nonzero_indices[valid_cols], valid_cols] = 255
+
+        return result_mask
+    
     def get_bottom_contours(self, contour_mask) -> np.array:
         height, width = contour_mask.shape
         result_mask = np.zeros_like(contour_mask, dtype=np.uint8)

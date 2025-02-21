@@ -46,24 +46,8 @@ def transform_lidar_to_camera_frame(R_IMU_TO_LIDAR, t_IMU_TO_LIDAR, R_IMU_TO_CAM
     return image_points_forward, points_c
 
 
-def merge_lidar_onto_image(image, lidar_points, intensities=None, point_size=2, max_value=None, min_value=None):
-    """
-    Overlays lidar points onto an image.
+def merge_lidar_onto_image(image, lidar_points, lidar_3d_points=None, intensities=None, point_size=2, max_value=60, min_value=0):
 
-    Parameters:
-    - image: The image onto which to overlay the points (numpy array of shape (H, W, 3))
-    - lidar_points: An array of lidar points projected onto the image plane.
-                    Expected shape is (N, 2) where columns are (x, y)
-    - intensities: An array of intensity values corresponding to each point.
-                   Expected shape is (N,)
-    - point_size: The size of the points to draw.
-    - max_value: Maximum value for normalization (optional)
-    - min_value: Minimum value for normalization (optional)
-    - value_type: 'depth' or 'intensity', used for labeling purposes.
-
-    Returns:
-    - image_with_lidar: The image with lidar points overlaid.
-    """
 
     if intensities is not None and len(intensities.shape) == 2:
         intensities = np.squeeze(intensities, axis=1)  # From (N, 1) to (N,)
@@ -74,39 +58,51 @@ def merge_lidar_onto_image(image, lidar_points, intensities=None, point_size=2, 
     # Create a separate overlay for the lidar points
     lidar_overlay = np.zeros_like(image_with_lidar)
 
+    if lidar_3d_points is not None:
+        if lidar_3d_points.ndim == 1:
+            depths = None  # Already 1D: each element is a depth value
+        else:
+            depths = lidar_3d_points[:, 2]
+    else:
+        depths = None
+
     # If intensities are provided, ensure they match the number of points
-    if intensities is not None:
-        if len(intensities) != len(lidar_points):
+    if depths is not None:
+        if len(depths) != len(lidar_points):
             raise ValueError("The length of intensities must match the number of lidar points.")
 
         # Normalize intensities
         if max_value is None:
-            max_value = np.max(intensities)
+            max_value = np.max(depths)
         if min_value is None:
-            min_value = np.min(intensities)
+            min_value = np.min(depths)
 
         # Avoid division by zero
         if max_value == min_value:
             max_value = min_value + 1
 
-        intensities_normalized = 1 - (intensities - min_value) / (max_value - min_value)
-        intensities_normalized = np.clip(intensities_normalized, 0, 1)
+        depths_normalized = (depths - min_value) / (max_value - min_value)
+        depths_normalized = np.clip(depths_normalized, 0, 1)
     else:
         # Use a default intensity of 1 for all points if no intensities are provided
-        intensities_normalized = np.ones(len(lidar_points))
+        depths_normalized = np.ones(len(lidar_points))
     
     # Use the 'Reds' colormap
-    colormap = plt.get_cmap('Reds')
+    #colormap = plt.get_cmap('Reds')
+    colormap = plt.get_cmap('gist_earth')
 
     # Draw points on the lidar overlay image
     for i, point in enumerate(lidar_points):
         x, y = int(round(point[0])), int(round(point[1]))
         if 0 <= x < width and 0 <= y < height:
-            value_norm = intensities_normalized[i]
-            color = colormap(value_norm)[:3]  # returns RGBA, take RGB
-            color = tuple(int(c * 255) for c in color[::-1])  # convert to BGR
-            color = (0, 0, 255)
+            value_norm = depths_normalized[i]
+            rgba = colormap(value_norm)  # returns RGBA, take RGB
+            color = (int(rgba[2]*255), int(rgba[1]*255), int(rgba[0]*255))
             cv2.circle(lidar_overlay, (x, y), point_size, color, -1)
+
+            #color = tuple(int(c * 255) for c in color[::-1])  # convert to BGR
+            #color = (0, 0, 255)
+            #cv2.circle(lidar_overlay, (x, y), point_size, color, -1)
 
     # Blend the original image and the lidar overlay
     alpha = 1  # Weight of the original image

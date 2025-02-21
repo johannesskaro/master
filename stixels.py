@@ -154,6 +154,9 @@ class Stixels:
             std_dev_cost = 0.0
 
             for v in range(v_f, -1, -1):
+            
+
+
                 x = row_medians[v]
                 count += 1
                 delta = x - mean
@@ -199,12 +202,10 @@ class Stixels:
         max_stixel_height = 300
 
         cost_map, free_space_boundary_depth = self.create_cost_map_2(disparity_map, depth_map, free_space_boundary, sam_countours)
-
         top_boundary, boundary_mask = self.get_optimal_height(cost_map, free_space_boundary_depth, free_space_boundary)
 
         #boundary_mask = cv2.resize(boundary_mask, (width, height), interpolation=cv2.INTER_NEAREST)
         #cv2.imshow("Boundary Mask", boundary_mask.astype(np.uint8) * 255)
-
 
         #top_boundary, boundary_mask = self.get_greedy_height(cost_map)
         
@@ -223,14 +224,13 @@ class Stixels:
             elif (v_f - v_top) > max_stixel_height:
                 v_top = v_f - max_stixel_height
 
-            
-
             stixel_median_depth = np.nanmedian(depth_map[v_top:v_f, stixel_range])
             stixel_median_disp = np.nanmedian(disparity_map[v_top:v_f, stixel_range])
             stixel = [v_top, v_f, stixel_median_disp, stixel_median_depth]
             self.rectangular_stixel_list.append(stixel)
 
         self.rectangular_stixel_list[0] = self.rectangular_stixel_list[1]
+        self.rectangular_stixel_list[-1] = self.rectangular_stixel_list[-2] 
 
         return self.rectangular_stixel_list, rectangular_stixel_mask
     
@@ -239,13 +239,13 @@ class Stixels:
     def create_cost_map_2(self, disparity_map, depth_map, free_space_boundary, sam_contours):
         height, width = disparity_map.shape
 
-        # Preprocessing steps
         normalized_disparity = cv2.normalize(disparity_map, None, 0, 255, cv2.NORM_MINMAX)
         normalized_disparity = normalized_disparity.astype(np.uint8)
         blurred_image = cv2.GaussianBlur(normalized_disparity, (5, 5), 0)
         grad_y = cv2.Sobel(blurred_image, cv2.CV_64F, 0, 1, ksize=5)
         grad_y = cv2.convertScaleAbs(grad_y)
-        _, grad_y = cv2.threshold(grad_y, 200, 255, cv2.THRESH_BINARY)
+        _, grad_y = cv2.threshold(grad_y, 75, 255, cv2.THRESH_BINARY)
+        #cv2.imshow("grad_y", grad_y.astype(np.uint8))
         grad_y = grad_y.astype(np.float32) / 255.0
 
         grad_y = ut.filter_mask_by_boundary(grad_y, free_space_boundary, offset=10)
@@ -253,9 +253,9 @@ class Stixels:
         grad_y = ut.get_bottommost_line(grad_y)
 
         sam_contours = ut.filter_mask_by_boundary(sam_contours, free_space_boundary, offset=10)
-        #cv2.imshow("sam_contours", sam_contours.astype(np.uint8))
         sam_contours = sam_contours.astype(np.float32) / 255.0
         sam_contours = ut.get_bottommost_line(sam_contours)
+        cv2.imshow("sam_contours", sam_contours.astype(np.uint8)*255)
 
         cost_map = np.full((height, self.num_stixels), 255, dtype=float)
         free_space_boundary_depth = np.zeros((height, self.num_stixels))
@@ -269,53 +269,49 @@ class Stixels:
             stixel_disparity = disparity_map[:, stixel_range]
             row_medians = np.nanmedian(stixel_disparity, axis=1)
 
-            row_medians_rev = row_medians[:v_f+1][::-1]
-            
-            # Precompute cumulative sums for row_medians for vectorized std dev over a sliding window
-            cumsum = np.cumsum(row_medians_rev)
-            cumsum2 = np.cumsum(row_medians_rev**2)
-            
-            # Precompute grad_y means for stixel_range
-            grad_y_means = np.mean(grad_y[:, stixel_range], axis=1)
+            #grad_y_means = np.mean(grad_y[:, stixel_range], axis=1)
             #grad_y_means = np.where(np.mean(grad_y[:, stixel_range], axis=1) > 0.3, 1, 0)
-            #grad_y_means = np.where(np.any(grad_y[:, stixel_range] > 0, axis=1), 1, 0)
+            grad_y_means = np.where(np.any(grad_y[:, stixel_range] > 0, axis=1), 1, 0)
             #sam_contours_means = np.mean(sam_contours[:, stixel_range], axis=1)
-            sam_contours_means = np.where(np.mean(sam_contours[:, stixel_range], axis=1) > 0.5, 1, 0)
-            #sam_contours_means = np.where(np.any(sam_contours[:, stixel_range] > 0, axis=1), 1, 0)
+            #sam_contours_means = np.where(np.mean(sam_contours[:, stixel_range], axis=1) > 0.5, 1, 0)
+            sam_contours_means = np.where(np.any(sam_contours[:, stixel_range] > 0, axis=1), 1, 0)
             
             depth_window = depth_map[v_f-10:v_f+1, stixel_range]
             free_space_boundary_depth[v_f, n] = np.nanmedian(depth_window)
 
 
-            grad_y_means[v_f-10:v_f+1] = 0
-            sam_contours_means[v_f-30:v_f+1] = 0
+            #grad_y_means[v_f-10:v_f+1] = 0
+            #sam_contours_means[v_f-30:v_f+1] = 0
             prev_v_top = prev_stixels[n][0]
             prev_depth = prev_stixels[n][3]
 
             # Define parameters (tuning these is key)
-            w1, w2, w3, w4, w5, w6 = 200, 100, 0, 0, 0, 0 #100, 100, 0, 150, 0, 0
-            local_window = 5
-            d_hat = row_medians[v_f]
-            Delta_D = 1
+            w1, w2, w3, w4 = 150, 150, 0, 200 #150, 150, 0, 200
+            
+            mean = 0.0
+            M2 = 0.0
+            count = 0
+            prev_std = 0
 
-            # Instead of a Python loop for each row, consider vectorizing the range from 0 to v_f
-            # For each v in [0, v_f], compute the local window statistics
             for v in range(v_f, -1, -1):
-                i = v_f - v
 
-                # Compute cumulative mean and std via the cumulative arrays:
-                count = i + 1
-                mean = cumsum[i] / count
-                var = (cumsum2[i] / count) - (mean**2)
-                current_std = np.sqrt(var) if var > 0 else 0
-                
-                #local_std = self.compute_local_std(cumsum, cumsum2, i, local_window)
-                local_std = 0
+                x = row_medians[v]
+                count += 1
+                delta = x - mean
+                mean += delta / count
+                delta2 = x - mean
+                M2 += delta * delta2
 
-                high_local_std = 1 if local_std > 0.15 and count > 10 else 0
-                high_std = 1 if current_std > 0.35 else 0
+                if count > 1:
+                    current_std = np.sqrt(M2 / (count - 1))
+                else:
+                    current_std = 0
 
-                # Height cost based on difference from previous stixel top
+                #if prev_std > current_std:
+                #    current_std = prev_std
+                #else:
+                #    prev_std = current_std
+
                 if prev_v_top == 0:
                     delta_height = 0
                     height_cost = 0
@@ -324,14 +320,17 @@ class Stixels:
                     #scale = max(0, 1 - (abs(prev_depth - free_space_boundary_depth[v_f, n]) / 5))
                     height_cost = delta_height #* scale
 
-                grad_y_v = grad_y_means[v]
-                std_dev_cost = 2**(1 - 2*(current_std**2))
+                if row_medians[v] == 0.0:
+                    grad_y_v = 0
+                    sam_contour = 0
+                    std_dev_cost = -1
+                else:
+                    std_dev_cost = 2**(1 - 2*(current_std**2)) - 1
+                    grad_y_v = grad_y_means[v]
+                    sam_contour = sam_contours_means[v]
 
-                sam_contour = sam_contours_means[v]
         
-                
-                cost_map[v, n] = - w1 * grad_y_v - w2 * std_dev_cost + w3 * high_std - w4 * high_local_std + w5 * height_cost - w6 * sam_contour
-                #cost_map[v, n] = - w1 * grad_y_v
+                cost_map[v, n] = - w1 * grad_y_v - w2 * std_dev_cost + w3 * height_cost - w4 * sam_contour
 
         cost_map = cv2.normalize(cost_map, None, 0, 255, cv2.NORM_MINMAX)
         cost_map = cost_map.astype(np.uint8)
@@ -702,8 +701,8 @@ class Stixels:
         DP = np.full((height, width), np.inf, dtype=float)
         # Parent pointer: for each position, record the row index from previous column that gave the optimum.
         parent = -np.ones((height, width), dtype=int)
-        NZ = 2 # 5
-        Cs = 2 # 4 #8
+        NZ = 5 #2 # 5
+        Cs = 2 #2 # 4 #8
         DP[:, 0] = cost_image[:, 0]
 
         def distance_transform_1d(f, penalty):
@@ -845,11 +844,24 @@ class Stixels:
             if len(stixel_points) > 0:
                 distances = stixel_points[:, 2]
                 #distances = np.linalg.norm(stixel_points, axis=1)
-                stixel_depth = np.nanmedian(distances)  # Take the median distance for robustness
+                stixel_depth = np.median(distances)  # Take the median distance for robustness
+                #stixel_depth = np.min(distances)
             else:
                 stixel_depth = np.nan  # Assign NaN or a placeholder for empty stixels
             stixel_depths.append(stixel_depth)
-        return np.array(stixel_depths)
+
+        filled = stixel_depths.copy()
+
+        for i in range(len(filled)):
+            if np.isnan(filled[i]):
+                # Check left neighbor first
+                if i > 0 and not np.isnan(filled[i-1]):
+                    filled[i] = filled[i-1]
+                # Otherwise, check right neighbor
+                elif i < len(filled) - 1 and not np.isnan(filled[i+1]):
+                    filled[i] = filled[i+1]
+
+        return np.array(filled)
     
     
     def calculate_2d_points_from_stixel_positions(stixel_positions, stixel_width, depth_map, cam_params):
@@ -893,13 +905,15 @@ class Stixels:
             z_lidar = lidar_stixel_depths[n]
             #print(z_lidar)
 
-            #if np.isnan(z_stereo) and np.isnan(z_lidar):
-            if np.isnan(z_lidar) or z_lidar == 0:
+            if np.isnan(z_stereo) and np.isnan(z_lidar):
+            #if np.isnan(z_lidar) or z_lidar == 0:
                 #print(1)
-                #Z_invalid = np.append(Z_invalid, n)
-                prev_z = self.prev_rectangular_stixel_list[n][3]
-                Z[n] = prev_z #np.nan
+                Z_invalid = np.append(Z_invalid, n)
+                Z[n] = np.nan
 
+                #prev_z = self.prev_rectangular_stixel_list[n][3]
+                #Z[n] = prev_z
+                
             elif np.isnan(z_stereo) or px == 0:
                 z_fused = z_lidar
                 Z[n] = z_fused
@@ -916,7 +930,7 @@ class Stixels:
                 #Z[n] = z_fused
                 Z[n] = z_lidar
 
-            self.rectangular_stixel_list[n][3] = Z[n]
+            #self.rectangular_stixel_list[n][3] = Z[n]
             
             #print(f"z_fused: {z_fused}")
             #if Z[n] > 40:
@@ -948,14 +962,21 @@ class Stixels:
         overlay = np.zeros_like(image)
         stixel_width = self.get_stixel_width(image.shape[1])
         disp_values = [stixel[2] for stixel in stixel_list]
-        min_disp = 0 #np.min(disp_values)
-        max_disp = 10 #np.max(disp_values)
+        depth_values = self.fused_stixel_depth_list
+        #depth_values = [stixel[3] for stixel in stixel_list]
+        min_depth = 0 #np.min(disp_values)
+        max_depth = 60 #np.max(disp_values)
+
+
+
+        cmap = plt.get_cmap('gist_earth')
     
 
         for n, stixel in enumerate(stixel_list):
             stixel_top = stixel[0]
             stixel_base = stixel[1]
             stixel_disp = stixel[2]
+            stixel_depth = depth_values[n] #stixel[3]
 
             #print(f"Stixel {n}: top={stixel_top}, base={stixel_base}, width={stixel_width}")
 
@@ -963,10 +984,22 @@ class Stixels:
 
                 #normalized_disp = np.uint8(255 * (stixel_disp - min_disp) / (max_disp - min_disp))
                 #normalized_disp_array = np.full((stixel_base - stixel_top, stixel_width), normalized_disp, dtype=np.uint8)
-                #colored_stixel = cv2.applyColorMap(normalized_disp_array, cv2.COLORMAP_JET)
-                green_stixel = np.full((stixel_base - stixel_top, stixel_width, 3), (0, 80, 0), dtype=np.uint8) #(0, 50, 0)
+                normalized_depth = np.uint8(255 * (stixel_depth - min_depth) / (max_depth - min_depth))
 
-                overlay[stixel_top:stixel_base, n * stixel_width:(n + 1) * stixel_width] = green_stixel
+
+
+                jet_color = cv2.applyColorMap(np.array([[normalized_depth]], dtype=np.uint8), cv2.COLORMAP_JET)[0,0,:]
+                
+                #green_stixel = np.full((stixel_base - stixel_top, stixel_width, 3), (0, 80, 0), dtype=np.uint8) #(0, 50, 0)
+
+                norm_depth = (stixel_depth - min_depth) / (max_depth - min_depth)
+                norm_depth = np.clip(norm_depth, 0, 1)
+                rgba = cmap(norm_depth)
+                color = (int(rgba[2]*255), int(rgba[1]*255), int(rgba[0]*255))
+
+                colored_stixel = np.full((stixel_base - stixel_top, stixel_width, 3), color, dtype=np.uint8)
+
+                overlay[stixel_top:stixel_base, n * stixel_width:(n + 1) * stixel_width] = colored_stixel
 
                 # Add a border (rectangle) around the stixel
                 cv2.rectangle(overlay, 
@@ -976,7 +1009,7 @@ class Stixels:
                         2)  # Thickness of the border
 
         alpha = 0.8  # Weight of the original image
-        beta = 1  # Weight of the overlay
+        beta = 0.8 #1  # Weight of the overlay
         gamma = 0.0  # Scalar added to each sum
 
         blended_image = cv2.addWeighted(image, alpha, overlay, beta, gamma)

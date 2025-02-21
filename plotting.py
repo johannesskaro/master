@@ -61,7 +61,6 @@ def plot_stixel_img_without_column(img, stixel_mask, column, width=5):
     plt.show(block=True)
 
 
-
 def show_lidar_image(lidar_depth_image, window_name="LiDAR Depth Image", scale_factor=10):
 
     # Replace NaNs with zero or interpolate
@@ -119,4 +118,32 @@ def plot_sam_masks_cv2(image, masks):
     # Show the result using OpenCV
     cv2.imshow("Segment Anything Model - Mask Visualization", overlay)
 
+
+def plot_yolo_masks(image, results):
+    """
+    Plots all segmentation masks from a YOLO Model in different colors using OpenCV.
+
+    :param image: Original image (H, W, 3) in NumPy format.
+    :param masks: Binary masks (N, H, W), where N is the number of detected objects.
+    """
+    
+    # Ensure the image is in RGB format
+    if len(image.shape) == 2 or image.shape[-1] == 1:
+        image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+
+    # Create a copy of the image to draw on
+    overlay = image.copy()
+
+    # Overlay each mask in a different color
+    r = results[0].masks
+    if hasattr(r, 'xy'):
+        masks = r.xy  # or simply r.masks depending on your API
+
+        for mask in masks:
+            mask = np.round(mask.reshape((-1, 1, 2))).astype(np.int32)
+            cv2.polylines(overlay, [mask], isClosed=True, color=(0, 255, 0), thickness=2)
+
+    cv2.imshow("YOLO Model - Mask Visualization", overlay)
+
+    
 

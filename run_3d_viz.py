@@ -124,6 +124,8 @@ def plot_scene(ax, stixel_3d_points, water_surface_polygon_points, plane_params,
     #shaded_soft_blue = light.shade_rgb(soft_blue, polygon_3d_points[:, 2])
 
     polygon = Poly3DCollection([polygon_3d_points], color=soft_blue, alpha=1)
+    #polygon.set_zsort('min') 
+    polygon.set_sort_zpos(1)
     ax.add_collection3d(polygon)
 
     stixel_vertices = np.array(stixel_3d_points)
@@ -131,12 +133,17 @@ def plot_scene(ax, stixel_3d_points, water_surface_polygon_points, plane_params,
     stixel_vertices = np.array(create_filling_stixels(stixel_vertices))
 
     # Plot each surface element
+    epsilon = 0
     for stixel in stixel_vertices:
+        stixel = stixel.copy()  # ensure we're not modifying original data
+        stixel[:, 2] += epsilon
         depth = (stixel[0,0] + stixel[1,0]) / 2
         normal = calculate_normal(stixel)
         color = cmap(norm(depth))
         shaded_color = apply_lighting(stixel, light1, light2, color)
         poly = Poly3DCollection([stixel], color=shaded_color)
+        #poly.set_zsort('max')
+        poly.set_sort_zpos(2)
         ax.add_collection3d(poly)
 
     # Plot the origin point in red to represent the boat's position
@@ -156,8 +163,6 @@ def plot_scene(ax, stixel_3d_points, water_surface_polygon_points, plane_params,
 #    ax.set_xlim(10, 0)
 #    ax.set_ylim(-5, 5)
 #    ax.set_zlim(-1, 5)
-
-
 
     ax.grid(False)
     ax._axis3don = False  # Hide the 3D axis lines

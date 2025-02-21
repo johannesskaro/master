@@ -25,7 +25,7 @@ class SVOCamera:
         init_params.coordinate_units = sl.UNIT.METER
         init_params.depth_mode = sl.DEPTH_MODE.NEURAL #sl.DEPTH_MODE.NEURAL
         init_params.depth_minimum_distance = 0
-        init_params.depth_maximum_distance = 60 # 100
+        init_params.depth_maximum_distance = 60 #100
         self.cam =  sl.Camera()
         assert self.cam.open(init_params) == sl.ERROR_CODE.SUCCESS
 

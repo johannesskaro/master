@@ -4,6 +4,7 @@ from scipy.io import loadmat
 from stixels import *
 from RWPS import RWPS
 from fastSAM import FastSAMSeg
+from ultralytics import YOLO
 from rosbags.rosbag2 import Reader
 from rosbags.serde import deserialize_cdr
 import cv2
@@ -23,25 +24,26 @@ from plotting import *
 
 #matplotlib.use('Agg')
 
-save_video = False
+save_video = True
 show_horizon = False
 create_bev = False
 save_bev = False
 create_polygon = False
 plot_polygon = False
-save_polygon_video = False
+save_polygon_video = True
 create_rectangular_stixels = True
 use_temporal_smoothing = True
 use_temporal_smoothing_ego_motion_compensation = False
 visualize_ego_motion_compensation = False
 save_3d_stixels = False
-save_3d_visualization_video = False
+save_3d_visualization_video = True
 
 dataset = "ma2"
 sequence = "scen4_2"
 mode = "fastsam" #"fastsam" #"rwps" #"fusion"
 iou_threshold = 0.1
 fastsam_model_path = "weights/FastSAM-x.pt"
+yolo_model_path = "weights/yolo11x-seg.pt"
 device = "cuda"
 src_dir = r"C:\Users\johro\Documents\BB-Perception\master"
 
@@ -53,7 +55,7 @@ plt.ion()
 if save_video:
     fourcc = cv2.VideoWriter_fourcc(*"MP4V")  # You can also use 'MP4V' for .mp4 format
     out = cv2.VideoWriter(
-        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_improved_stixels_v14.mp4",
+        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_improved_stixels_v21.mp4",
         fourcc,
         FPS,
         (W, H),
@@ -62,7 +64,7 @@ if save_video:
 if save_polygon_video:
     fourcc = cv2.VideoWriter_fourcc(*"MP4V")  # You can also use 'MP4V' for .mp4 format
     out_polygon = cv2.VideoWriter(
-        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_polygon_BEV_improved_stixels_v14.mp4",
+        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_polygon_BEV_improved_stixels_v21.mp4",
         fourcc,
         FPS,
         (H, H),
@@ -71,16 +73,18 @@ if save_polygon_video:
 if save_3d_visualization_video:
     fourcc = cv2.VideoWriter_fourcc(*"MP4V")  # You can also use 'MP4V' for .mp4 format
     out_3d_visualization = cv2.VideoWriter(
-        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_3d_visualization_v14.mp4",
+        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_3d_visualization_v21.mp4",
         fourcc,
         FPS,
         (1280, 720),
     )
 
+
 fastsam = FastSAMSeg(model_path=fastsam_model_path)
 rwps3d = RWPS()
 stixels = Stixels()
 temporal_smoothing = TemporalSmoothing(5, K)
+#yolo_model = YOLO(yolo_model_path)
  
 cam_params = {"cx": K[0,2], "cy": K[1,2], "fx": K[0,0], "fy":K[1,1], "b": baseline}
 P1 = K @ np.hstack((np.eye(3), np.zeros((3, 1))))
@@ -183,13 +187,15 @@ def main():
         #sam_masks = fastsam.get_all_masks(left_img, device=device)
         #plot_sam_masks_cv2(left_img, sam_masks)
 
-        sam_contours = fastsam.get_all_countours(left_img, device=device)
-        #cv2.imshow("SAM countours", sam_contours)
-        #sam_contours = fastsam.get_bottom_contours(sam_contours)
-        #cv2.imshow("Bottom countours", sam_contours)
+        #sam_contours = fastsam.get_all_countours(left_img, device=device, min_area=4000)
+        #cv2.imshow("SAM contours", sam_contours.astype(np.uint8))
+        sam_contours = fastsam.get_all_upper_countours(left_img, device=device)
+        #cv2.imshow("SAM upper contours", sam_contours.astype(np.uint8))
 
-        #horizontal_contours = fastsam.get_horizontal_contours(left_img, device=device)
-        #cv2.imshow("Horizontal SAM countours", horizontal_contours) 
+        #yolo_results = yolo_model(left_img)
+        #yolo_results = yolo_model.predict(left_img, show=True)
+        #print(yolo_results.shape)
+        #plot_yolo_masks(left_img, yolo_results)
 
         (H, W, D) = left_img.shape
 
@@ -318,7 +324,7 @@ def main():
             
             #rec_stixel_list = stixels.smooth_stixel_tops_by_depth(disparity_img, depth_img)
             #cv2.imshow("Rectangular Stixels", rectangular_stixel_mask.astype(np.uint8) * 255)
-            free_space_boundary, free_space_boundary_mask = stixels.get_free_space_boundary(water_mask)
+            #free_space_boundary, free_space_boundary_mask = stixels.get_free_space_boundary(water_mask)
             #rec_stixel_list, rec_stixel_mask = stixels.create_stixels(disparity_img, depth_img, free_space_boundary, cam_params) 
 
 
@@ -410,7 +416,7 @@ def main():
 
         image_with_stixels = stixels.merge_stixels_onto_image(rec_stixel_list, left_img)
         #image_with_stixels_2 = stixels.merge_stixels_onto_image(rec_stixel_list, left_img_contrastreduced)
-        image_with_stixels_and_filtered_lidar = merge_lidar_onto_image(image_with_stixels, filtered_lidar_points)
+        image_with_stixels_and_filtered_lidar = merge_lidar_onto_image(image_with_stixels, filtered_lidar_points, filtered_lidar_3d_points)
         #image_with_stixels_and_lidar = merge_lidar_onto_image(image_with_stixels, lidar_image_points)
         #image_with_lidar = merge_lidar_onto_image(left_img, lidar_image_points)
         
@@ -454,9 +460,8 @@ def main():
 
         if save_video:
             #out.write(water_img)
-            #out.write(image_with_stixels_and_filtered_lidar)
+            out.write(image_with_stixels_and_filtered_lidar)
             #out.write(water_img_with_free_space_boundary)
-            pass
 
         key = cv2.waitKey(10)
 
