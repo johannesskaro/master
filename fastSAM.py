@@ -76,7 +76,7 @@ class FastSAMSeg:
 
         return mask
     
-    def get_all_masks(self, img: np.array, device: str = 'cuda') -> np.array:
+    def get_all_masks(self, img: np.array, device: str = 'cuda', min_area=3000) -> np.array:
         """
         Obtain all masks for the input image.
 
@@ -93,6 +93,21 @@ class FastSAMSeg:
             masks = np.array(results[0].masks.data.cpu())
         else: 
             masks = np.array([])
+
+        valid_masks = []
+        for mask in masks:
+            # Convert to a binary mask
+            binary_mask = (mask > 0).astype(np.uint8)
+            # Optionally multiply by 255 if needed: binary_mask = binary_mask * 255
+            contours, _ = cv2.findContours(binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            # Check if any contour meets the minimum area requirement
+            for contour in contours:
+                if cv2.contourArea(contour) >= min_area:
+                    valid_masks.append(mask)
+                    break  # Stop checking further contours for this mask
+
+        valid_masks = np.array(valid_masks)
         return masks
     
     def get_all_countours(self, img: np.array, device: str = 'cuda', min_area=5000) -> np.array:

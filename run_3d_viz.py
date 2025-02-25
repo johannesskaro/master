@@ -97,7 +97,7 @@ def plot_scene(ax, stixel_3d_points, water_surface_polygon_points, plane_params,
     height = d / normal_length
 
     depth_min = 0
-    depth_max = 60
+    depth_max = 60 #60
     norm = mcolors.Normalize(vmin=depth_min, vmax=depth_max)
     cmap = cm.gist_earth  #gist_rainbow  # Choose any color map you prefer (e.g., viridis, plasma, coolwarm)
     ax.clear()
@@ -133,10 +133,7 @@ def plot_scene(ax, stixel_3d_points, water_surface_polygon_points, plane_params,
     stixel_vertices = np.array(create_filling_stixels(stixel_vertices))
 
     # Plot each surface element
-    epsilon = 0
     for stixel in stixel_vertices:
-        stixel = stixel.copy()  # ensure we're not modifying original data
-        stixel[:, 2] += epsilon
         depth = (stixel[0,0] + stixel[1,0]) / 2
         normal = calculate_normal(stixel)
         color = cmap(norm(depth))
@@ -160,9 +157,9 @@ def plot_scene(ax, stixel_3d_points, water_surface_polygon_points, plane_params,
     ax.set_ylim(-10, 10)
     ax.set_zlim(-1, 8)
 
-#    ax.set_xlim(10, 0)
-#    ax.set_ylim(-5, 5)
-#    ax.set_zlim(-1, 5)
+ #   ax.set_xlim(10, 0)
+  #  ax.set_ylim(-5, 5)
+  #  ax.set_zlim(-1, 5)
 
     ax.grid(False)
     ax._axis3don = False  # Hide the 3D axis lines

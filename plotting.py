@@ -94,29 +94,27 @@ def plot_sam_masks_cv2(image, masks):
     # Ensure the image is in RGB format
     if len(image.shape) == 2 or image.shape[-1] == 1:
         image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
-
-    # Create a copy of the image to draw on
+    
     overlay = image.copy()
-
-    # Generate random colors for each mask
     num_masks = masks.shape[0]
     colors = [tuple(random.randint(50, 255) for _ in range(3)) for _ in range(num_masks)]
+    alpha = 0.5  # transparency factor
 
-    # Overlay each mask in a different color
     for i in range(num_masks):
-        mask = masks[i]  # Get the i-th mask
+        mask = masks[i]
         color = colors[i]
-
-        # Create a color mask
+        
+        # Create a colored overlay for the mask region
         color_mask = np.zeros_like(image, dtype=np.uint8)
-        color_mask[mask == 1] = color  # Apply color where mask is 1
+        color_mask[mask == 1] = color
+        
+        # Only blend where the mask is active
+        overlay[mask == 1] = cv2.addWeighted(overlay[mask == 1], 1 - alpha,
+                                             color_mask[mask == 1], alpha, 0)
+    
+    cv2.imshow("SAM Mask Visualization", overlay)
 
-        # Blend the mask with the image
-        alpha = 0.5  # Transparency level
-        overlay = cv2.addWeighted(overlay, 1, color_mask, alpha, 0)
-
-    # Show the result using OpenCV
-    cv2.imshow("Segment Anything Model - Mask Visualization", overlay)
+    return overlay
 
 
 def plot_yolo_masks(image, results):

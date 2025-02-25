@@ -122,8 +122,123 @@ def create_cost_map(self, disparity_map, depth_map, free_space_boundary, min_sti
         cost_map_resized = cv2.resize(-cost_map, (new_width, height), interpolation=cv2.INTER_NEAREST)
         #cost_map_colored = cv2.applyColorMap(cost_map_resized, cv2.COLORMAP_JET)
         cv2.imshow("Cost Map", cost_map_resized)
-        cv2.imshow("grad_y", grad_y)
-        colored_disparity = cv2.applyColorMap(normalized_disparity, cv2.COLORMAP_JET)
-        cv2.imshow("colored_disparity", colored_disparity)
+        #cv2.imshow("grad_y", grad_y)
+        #colored_disparity = cv2.applyColorMap(normalized_disparity, cv2.COLORMAP_JET)
+        #cv2.imshow("colored_disparity", colored_disparity)
 
         return cost_map, free_space_boundary_depth
+
+
+def create_rectangular_stixels(self, water_mask, disparity_map, depth_map):
+    free_space_boundary, _ = self.get_free_space_boundary(water_mask)
+    stixel_width = self.get_stixel_width(water_mask.shape[1])
+
+    std_dev_threshold = 0.35
+    #median_disp_change_threshold = 0.1
+    window_size = 10
+    min_stixel_height = 20
+
+    rectangular_stixel_mask = np.zeros_like(water_mask)
+    self.rectangular_stixel_list = []
+
+    for n in range(self.num_stixels):
+
+        stixel_range = slice(n * stixel_width, (n + 1) * stixel_width)
+        stixel_base = free_space_boundary[stixel_range]
+        stixel_base_height = int(np.median(stixel_base))
+        stixel_top_height = stixel_base_height - min_stixel_height
+
+        std_dev = 0
+        median_row_disp_list = []
+
+        for v in range(stixel_base_height, 0, -1):
+
+            median_row_disp = np.nanmedian(disparity_map[v, stixel_range])
+            median_row_disp_list.append(median_row_disp)
+            std_dev = np.std(median_row_disp_list)
+            #print(f"std_dev: {std_dev}")
+            if std_dev > std_dev_threshold:
+                stixel_top_height = v
+                if stixel_base_height - v < min_stixel_height:
+                    stixel_top_height = stixel_base_height - min_stixel_height
+                break
+
+        stixel_median_disp = np.nanmedian(disparity_map[stixel_top_height:stixel_base_height, stixel_range])
+        stixel_median_depth = np.nanmedian(depth_map[stixel_top_height:stixel_base_height, stixel_range])
+        stixel = [stixel_top_height, stixel_base_height, stixel_median_disp, stixel_median_depth]
+        self.rectangular_stixel_list.append(stixel)
+        rectangular_stixel_mask[stixel_top_height:stixel_base_height, stixel_range] = 1
+
+    return self.rectangular_stixel_list, rectangular_stixel_mask
+
+    
+def create_rectangular_stixels_2(self, water_mask, disparity_map, depth_map):
+    free_space_boundary, _ = self.get_free_space_boundary(water_mask)
+    stixel_width = self.get_stixel_width(water_mask.shape[1])
+
+    std_dev_threshold_base = 0.25   # 0.35
+    ref_depth = 40
+    offset = 0.2
+    min_stixel_height = 20
+
+    rectangular_stixel_mask = np.zeros_like(water_mask)
+    self.rectangular_stixel_list = []
+
+    for n in range(self.num_stixels):
+        stixel_range = slice(n * stixel_width, (n + 1) * stixel_width)
+        stixel_base = free_space_boundary[stixel_range]
+        v_f = int(np.median(stixel_base))
+        v_top = v_f - min_stixel_height
+
+        # Forhåndsberegn rad-medianer for de aktuelle kolonnene (hele bildet)
+        stixel_disparity = disparity_map[:, stixel_range]
+        row_medians = np.nanmedian(stixel_disparity, axis=1)
+
+        stixel_depth = depth_map[v_f, stixel_range]
+        base_depth = np.nanmedian(stixel_depth)
+
+        adaptive_threshold = std_dev_threshold_base * (base_depth / ref_depth) + offset
+
+        mean = 0.0
+        M2 = 0.0
+        count = 0
+        std_dev_cost = 0.0
+
+        for v in range(v_f, -1, -1):
+        
+
+
+            x = row_medians[v]
+            count += 1
+            delta = x - mean
+            mean += delta / count
+            delta2 = x - mean
+            M2 += delta * delta2
+
+            if count > 1:
+                current_std = np.sqrt(M2 / (count - 1))
+                
+                
+                #if current_std > adaptive_threshold:
+                #    v_top = v
+                #    if (v_f - v) < min_stixel_height:
+                #        v_top = v_f - min_stixel_height
+                #    break
+
+                std_dev_cost = 2**(1 - 2*(current_std**2))
+
+                if std_dev_cost < 1.5:
+                    v_top = v
+                    if (v_f - v) < min_stixel_height:
+                        v_top = v_f - min_stixel_height
+                    break
+
+        stixel_median_disp = np.nanmedian(disparity_map[v_top:v_f, stixel_range])
+        stixel_median_depth = np.nanmedian(depth_map[v_top:v_f, stixel_range])
+
+        stixel = [v_top, v_f, stixel_median_disp, stixel_median_depth]
+        self.rectangular_stixel_list.append(stixel)
+
+        rectangular_stixel_mask[v_top:v_f, stixel_range] = 1
+
+    return self.rectangular_stixel_list, rectangular_stixel_mask

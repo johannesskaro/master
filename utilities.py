@@ -11,7 +11,7 @@ from mpl_toolkits.mplot3d import Axes3D
 def blend_image_with_mask(img, mask, color=[0, 0, 255], alpha1=1, alpha2=1):
     # Convert binary mask to a colored mask (e.g., red)
     colored_mask = np.zeros_like(img)
-    colored_mask[mask == 1] = color
+    colored_mask[mask > 0] = color
 
     # Blend the original image and the colored mask
     blended = cv2.addWeighted(img, alpha1, colored_mask, alpha2, 0)
@@ -493,7 +493,7 @@ def dehomog(vec):
     return vec[:-1] / vec[-1]
 
 
-def get_bottommost_line(mask, thickness=3):
+def get_bottommost_line(mask, thickness=5):
 
     height, width = mask.shape
 
@@ -554,3 +554,17 @@ def filter_mask_by_boundary(mask, boundary_indices, offset=30):
     filtered_mask = np.where(keep_mask, mask, 0)
 
     return filtered_mask
+
+def write_coordinates_to_file(filename, frame, coordinates):
+
+    coordinates_list = [list(coord) for coord in coordinates]
+    
+    data = {
+        "frame": frame,
+        "points": coordinates_list
+    }
+    
+    # Open the file in append mode; if it doesn't exist, it will be created
+    with open(filename, 'a') as file:
+        json.dump(data, file)
+        file.write("\n")

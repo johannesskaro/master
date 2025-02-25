@@ -24,19 +24,19 @@ from plotting import *
 
 #matplotlib.use('Agg')
 
-save_video = True
+save_video = False
 show_horizon = False
 create_bev = False
 save_bev = False
-create_polygon = False
 plot_polygon = False
-save_polygon_video = True
-create_rectangular_stixels = True
+save_polygon_video = False
 use_temporal_smoothing = True
 use_temporal_smoothing_ego_motion_compensation = False
 visualize_ego_motion_compensation = False
 save_3d_stixels = False
-save_3d_visualization_video = True
+save_3d_visualization_video = False
+save_cost_video = False
+write_BEV_to_file = False
 
 dataset = "ma2"
 sequence = "scen4_2"
@@ -55,7 +55,7 @@ plt.ion()
 if save_video:
     fourcc = cv2.VideoWriter_fourcc(*"MP4V")  # You can also use 'MP4V' for .mp4 format
     out = cv2.VideoWriter(
-        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_improved_stixels_v21.mp4",
+        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_improved_stixels_v24.mp4",
         fourcc,
         FPS,
         (W, H),
@@ -64,7 +64,7 @@ if save_video:
 if save_polygon_video:
     fourcc = cv2.VideoWriter_fourcc(*"MP4V")  # You can also use 'MP4V' for .mp4 format
     out_polygon = cv2.VideoWriter(
-        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_polygon_BEV_improved_stixels_v21.mp4",
+        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_polygon_BEV_improved_stixels_v24.mp4",
         fourcc,
         FPS,
         (H, H),
@@ -73,10 +73,20 @@ if save_polygon_video:
 if save_3d_visualization_video:
     fourcc = cv2.VideoWriter_fourcc(*"MP4V")  # You can also use 'MP4V' for .mp4 format
     out_3d_visualization = cv2.VideoWriter(
-        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_3d_visualization_v21.mp4",
+        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_3d_visualization_v24.mp4",
         fourcc,
         FPS,
         (1280, 720),
+    )
+
+if save_cost_video:
+    fourcc = cv2.VideoWriter_fourcc(*"MP4V")  # You can also use 'MP4V' for .mp4 format
+    out_cost = cv2.VideoWriter(
+        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_cost_map_v24.mp4",
+        fourcc,
+        FPS,
+        (W, H),
+        isColor=False
     )
 
 
@@ -184,18 +194,6 @@ def main():
         lidar_image_points = np.squeeze(next_ma2_lidar_points, axis=1)  # From (N, 1, 2) to (N, 2)
         lidar_3d_points = xyz_c
 
-        #sam_masks = fastsam.get_all_masks(left_img, device=device)
-        #plot_sam_masks_cv2(left_img, sam_masks)
-
-        #sam_contours = fastsam.get_all_countours(left_img, device=device, min_area=4000)
-        #cv2.imshow("SAM contours", sam_contours.astype(np.uint8))
-        sam_contours = fastsam.get_all_upper_countours(left_img, device=device)
-        #cv2.imshow("SAM upper contours", sam_contours.astype(np.uint8))
-
-        #yolo_results = yolo_model(left_img)
-        #yolo_results = yolo_model.predict(left_img, show=True)
-        #print(yolo_results.shape)
-        #plot_yolo_masks(left_img, yolo_results)
 
         (H, W, D) = left_img.shape
 
@@ -206,8 +204,6 @@ def main():
         rwps_mask_3d = rwps_mask_3d.astype(int)
 
         water_mask = np.zeros_like(depth_img)
-
-
 
         # FastSAM classifier
         if mode == "fastsam":
@@ -318,33 +314,60 @@ def main():
             water_img, blue_water_mask, pink_color, alpha1=1, alpha2=0.5
         )
 
-        if create_rectangular_stixels:
-            
-            rec_stixel_list, rec_stixel_mask = stixels.create_rectangular_stixels_3(water_mask, disparity_img, depth_img, sam_contours)
-            
-            #rec_stixel_list = stixels.smooth_stixel_tops_by_depth(disparity_img, depth_img)
-            #cv2.imshow("Rectangular Stixels", rectangular_stixel_mask.astype(np.uint8) * 255)
-            #free_space_boundary, free_space_boundary_mask = stixels.get_free_space_boundary(water_mask)
-            #rec_stixel_list, rec_stixel_mask = stixels.create_stixels(disparity_img, depth_img, free_space_boundary, cam_params) 
+        #free_space_boundary, free_space_boundary_mask = stixels.get_free_space_boundary(water_mask)
 
+        #sam_masks = fastsam.get_all_masks(left_img, device=device)
+        #sam_masks_overlay = plot_sam_masks_cv2(left_img, sam_masks)
 
-            stixel_mask, stixel_positions = stixels.get_stixels_base(water_mask)
+        #sam_contours = fastsam.get_all_countours(left_img, device=device, min_area=4000)
+        #cv2.imshow("SAM contours", sam_contours.astype(np.uint8))
+        sam_contours = fastsam.get_all_upper_countours(left_img, device=device)
+        #sam_contours = ut.filter_mask_by_boundary(sam_contours, free_space_boundary, offset=10)
+        #sam_contours = sam_contours.astype(np.float32) / 255.0
+        #sam_contours = ut.get_bottommost_line(sam_contours)
+        #cv2.imshow("SAM upper contours", sam_contours.astype(np.uint8))
 
-            filtered_lidar_points, filtered_lidar_3d_points, lidar_stixel_indices = stixels.filter_lidar_points_by_stixels(lidar_image_points, lidar_3d_points)
-            lidar_stixel_depths = stixels.get_stixel_depth_from_lidar_points(filtered_lidar_3d_points, lidar_stixel_indices)
-            stixels_2d_points = stixels.get_polygon_points_from_lidar_and_stereo_depth(lidar_stixel_depths, stixel_positions, cam_params)
-            stixels_polygon = create_polygon_from_2d_points(stixels_2d_points)
-            stixels_3d_points = stixels.get_stixel_3d_points(cam_params)
+        #sam_masks_and_contours = ut.blend_image_with_mask(left_img, sam_contours, [0, 0, 255], alpha1=0.5, alpha2=1)
+        #cv2.imshow("SAM masks and contours", sam_masks_and_contours)
+
+        #normalized_disparity = cv2.normalize(disparity_img, None, 0, 255, cv2.NORM_MINMAX)
+        #normalized_disparity = normalized_disparity.astype(np.uint8)
+        #blurred_image = cv2.GaussianBlur(normalized_disparity, (5, 5), 0)
+        #grad_y = cv2.Sobel(blurred_image, cv2.CV_64F, 0, 1, ksize=5)
+        #grad_y = cv2.convertScaleAbs(grad_y)
+        #_, grad_y = cv2.threshold(grad_y, 75, 255, cv2.THRESH_BINARY)
+        #grad_y = ut.filter_mask_by_boundary(grad_y, free_space_boundary, offset=10)
+        #grad_y = ut.get_bottommost_line(grad_y)
         
-            #rec_stixel_list = stixels.create_stixels_from_lidar_depth_image_2(lidar_depth_image, scanline_to_img_row, img_row_to_scanline, free_space_boundary)
+        #grad_y_blended = ut.blend_image_with_mask(left_img, grad_y, [0, 255, 0], alpha1=0.7, alpha2=1)
+        #cv2.imshow("grad_y", grad_y_blended.astype(np.uint8))
+        #colored_disparity = cv2.applyColorMap(normalized_disparity, cv2.COLORMAP_JET)
+        #cv2.imshow("colored_disparity", colored_disparity)
 
-        if create_polygon:    
-            stixel_mask, stixel_positions = stixels.get_stixels_base(water_mask)
-            stixel_width = stixels.get_stixel_width(W)
-            stixels_2d_points = stixels.calculate_2d_points_from_stixel_positions(stixel_positions, stixel_width, depth_img, cam_params)
-            stixels_polygon = create_polygon_from_2d_points(stixels_2d_points)
 
-            cv2.imshow("Stixels", stixel_mask.astype(np.uint8) * 255)
+
+        rec_stixel_list, rec_stixel_mask, cost_map = stixels.create_rectangular_stixels_3(water_mask, disparity_img, depth_img, sam_contours)
+        
+
+        #rec_stixel_list, rec_stixel_mask = stixels.create_stixels(disparity_img, depth_img, free_space_boundary, cam_params) 
+
+
+        stixel_mask, stixel_positions = stixels.get_stixels_base(water_mask)
+
+        filtered_lidar_points, filtered_lidar_3d_points, lidar_stixel_indices = stixels.filter_lidar_points_by_stixels(lidar_image_points, lidar_3d_points)
+        lidar_stixel_depths = stixels.get_stixel_depth_from_lidar_points(filtered_lidar_3d_points, lidar_stixel_indices)
+        stixels_2d_points = stixels.get_polygon_points_from_lidar_and_stereo_depth(lidar_stixel_depths, stixel_positions, cam_params)
+        stixels_polygon = create_polygon_from_2d_points(stixels_2d_points)
+
+        stixels_3d_points = stixels.get_stixel_3d_points(cam_params)
+    
+        #rec_stixel_list = stixels.create_stixels_from_lidar_depth_image_2(lidar_depth_image, scanline_to_img_row, img_row_to_scanline, free_space_boundary)
+
+
+        if write_BEV_to_file:
+
+            ut.write_coordinates_to_file("files/shoreline_scen4_2.jsonl", frame=curr_frame, coordinates=stixels_2d_points)
+
 
         if plot_polygon:
 
@@ -368,6 +391,9 @@ def main():
             fig, ax = plt.subplots(figsize=((H) / dpi, (H ) / dpi), dpi=dpi)
             ax.set_xlim(-30, 30)
             ax.set_ylim(0, 60)
+
+            #ax.set_xlim(-12, 12)
+            #ax.set_ylim(0, 15)
             myPoly.plot(ax=ax)
             fig.canvas.draw()
             # Convert the plot to a numpy array (RGB image)
@@ -410,6 +436,9 @@ def main():
             img = cv2.resize(img, (1280, 720))
             img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)  # Convert RGB to BGR for OpenCV
             out_3d_visualization.write(img)
+
+
+
             
  
 
@@ -463,6 +492,9 @@ def main():
             out.write(image_with_stixels_and_filtered_lidar)
             #out.write(water_img_with_free_space_boundary)
 
+        if save_cost_video:
+            out_cost.write(cost_map)
+
         key = cv2.waitKey(10)
 
         if key == 27:  # Press ESC to exit
@@ -483,6 +515,8 @@ def main():
     cv2.destroyAllWindows()
     if save_video:
         out.release()
+    if save_cost_video:
+        out_cost.release()
     if save_polygon_video:
         out_polygon.release()
     if save_3d_visualization_video:
