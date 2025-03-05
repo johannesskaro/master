@@ -93,14 +93,14 @@ class Stixels:
         free_space_boundary, _ = self.get_free_space_boundary(water_mask)
         stixel_width = self.get_stixel_width(water_mask.shape[1])
         height, width = disparity_map.shape
-        min_stixel_height = 20
+        min_stixel_height =  20
         max_stixel_height = 500
 
         cost_map, free_space_boundary_depth, cost_map_resized = self.create_cost_map_2(disparity_map, depth_map, free_space_boundary, sam_countours)
         #cost_map, free_space_boundary_depth, membership_image = self.create_cost_map_3(disparity_map, depth_map, free_space_boundary, sam_countours)
         top_boundary, boundary_mask = self.get_optimal_height(cost_map, free_space_boundary_depth, free_space_boundary)
 
-        #boundary_mask = cv2.resize(boundary_mask, (width, height), interpolation=cv2.INTER_NEAREST)
+        boundary_mask = cv2.resize(boundary_mask, (width, height), interpolation=cv2.INTER_NEAREST)
         #cv2.imshow("Boundary Mask", boundary_mask.astype(np.uint8) * 255)
 
         #top_boundary, boundary_mask = self.get_greedy_height(cost_map)
@@ -128,7 +128,7 @@ class Stixels:
         self.rectangular_stixel_list[0] = self.rectangular_stixel_list[1]
         self.rectangular_stixel_list[-1] = self.rectangular_stixel_list[-2] 
 
-        return self.rectangular_stixel_list, rectangular_stixel_mask, cost_map_resized
+        return self.rectangular_stixel_list, rectangular_stixel_mask, cost_map_resized, boundary_mask
     
     
     def create_cost_map_2(self, disparity_map, depth_map, free_space_boundary, sam_contours):
@@ -152,7 +152,7 @@ class Stixels:
         sam_contours = ut.get_bottommost_line(sam_contours)
         #cv2.imshow("sam_contours", sam_contours.astype(np.uint8)*255)
 
-        cost_map = np.full((height, self.num_stixels), 255, dtype=float)
+        cost_map = np.full((height, self.num_stixels), 200, dtype=float)
         free_space_boundary_depth = np.zeros((height, self.num_stixels))
         prev_stixels = self.rectangular_stixel_list
 
@@ -181,7 +181,7 @@ class Stixels:
             prev_depth = prev_stixels[n][3]
 
             # Define parameters (tuning these is key)
-            w1, w2, w3, w4 = 100, 100, 0, 200 #150, 150, 0, 200
+            w1, w2, w3, w4 = 100, 100, 0, 200 #100, 100, 0, 200
             
             mean = 0.0
             M2 = 0.0
@@ -830,7 +830,7 @@ class Stixels:
 
             elif len(prev_stixel_points) > 0:
                 distances = prev_stixel_points[:, 2]
-                stixel_depth = np.nanmedian(distances)
+                stixel_depth = np.percentile(distances, 30) #np.nanmedian(distances)
 
             else:
                 stixel_depth = np.nan  # Assign NaN or a placeholder for empty stixels
@@ -863,7 +863,7 @@ class Stixels:
                 elif right_idx is not None:
                     filled[i] = filled[right_idx]
 
-        return np.array(filled)
+        return np.array(stixel_depths)
     
     
     def calculate_2d_points_from_stixel_positions(stixel_positions, stixel_width, depth_map, cam_params):
@@ -1023,8 +1023,8 @@ class Stixels:
                         (0,0,0),  # Color of the border (BGR)
                         2)  # Thickness of the border
 
-        alpha = 0.8  # Weight of the original image
-        beta = 0.5 #1  # Weight of the overlay
+        alpha = 1 # 0.8  # Weight of the original image
+        beta = 0.8 #1  # Weight of the overlay
         gamma = 0.0  # Scalar added to each sum
 
         blended_image = cv2.addWeighted(image, alpha, overlay, beta, gamma)

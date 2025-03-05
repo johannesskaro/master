@@ -16,7 +16,7 @@ from python_tools.stereo_svo import SVOCamera
 #Scen1 - Into tunnel
 #SVO_FILE_PATH = r"C:\Users\johro\Documents\2023-07-11_Multi_ZED_Summer\ZED camera svo files\2023-07-11_11-30-51_28170706_HD1080_FPS15.svo"
 #ROSBAG_NAME = "scen1"
-#START_TIMESTAMP = 1689067892194593719 + 120000000000
+#START_TIMESTAMP = 1689067892194593719 #+ 120000000000
 #ma2_clap_timestamps = np.array([1689068801634572145, 1689068803035078922, 1689068804635190937, 1689068806436892969, 1689068809235474632]) 
 #svo_clap_timestamps = np.array([1689068801796052729, 1689068803135787729, 1689068804743766729, 1689068806686255729, 1689068809298756729]) 
 
@@ -124,7 +124,21 @@ H_POINTS_LEFT_ZED_FROM_LIDAR = H_POINTS_LEFT_ZED_FROM_LEFT_CAM @ H_POINTS_LEFT_C
 H = H_POINTS_RIGHT_FROM_LEFT_ZED @ H_POINTS_LEFT_ZED_FROM_LEFT_CAM @ H_POINTS_CAM_FROM_FLOOR @ H_POINTS_FLOOR_FROM_LIDAR #Use right zed
 H_INV_TO_RIGHT_ZED = np.linalg.inv(H_POINTS_LEFT_ZED_FROM_LEFT_CAM @ H_POINTS_CAM_FROM_FLOOR @ H_POINTS_FLOOR_FROM_LIDAR)
 
+OFFSET_LAT = 1.2091700000382843e-05
+OFFSET_LON = -2.2780000000111045e-05
+PIREN_LAT = 63.4389029083 + OFFSET_LAT
+PIREN_LON = 10.39908278 + OFFSET_LON
+PIREN_ALT = 39.923
 
+ROT_PIREN_TO_PIREN_ENU = np.array([[ 4.89658314e-12,  1.00000000e+00, -2.06823107e-13],
+       [ 1.00000000e+00, -4.89658314e-12,  1.01273332e-24],
+       [-1.26217745e-29, -2.06823107e-13, -1.00000000e+00]])
+TRANS_PIREN_TO_PIREN_ENU = np.array([0., 0., 0.])
+H_POINTS_PIREN_FROM_PIREN_ENU = np.block([
+    [ROT_PIREN_TO_PIREN_ENU, TRANS_PIREN_TO_PIREN_ENU[:,np.newaxis]], 
+    [np.zeros((1,3)), np.ones((1,1))]
+])
+H_POINTS_PIREN_ENU_FROM_PIREN = np.linalg.inv(H_POINTS_PIREN_FROM_PIREN_ENU)
 
 LIDAR_TOPIC = "/lidar_aft/points"
 
@@ -254,6 +268,44 @@ def gen_ma2_lidar_depth_image():
 
                 yield timestamp, lidar_depth_image, scanline_to_img_row, img_row_to_scanline
 
+def gen_ma2_gnss_ned():
+    GNSS_TOPIC = "/senti_parser/SentiPose"
+    t_pos_ori = []
+    with Reader(ROSBAG_PATH) as reader:
+        connections = [c for c in reader.connections if c.topic == GNSS_TOPIC]
+        for connection, timestamp, rawdata in reader.messages(connections):
+            msg = deserialize_cdr(rawdata, connection.msgtype)
+            timestamp_msg = msg.header.stamp.sec * (10**9) + msg.header.stamp.nanosec
+
+            pos_ros = msg.pose.position
+            pos = np.array([pos_ros.x, pos_ros.y, pos_ros.z])
+            ori_ros = msg.pose.orientation
+            ori_quat = np.array([ori_ros.x, ori_ros.y, ori_ros.z, ori_ros.w])
+
+            H = H_POINTS_PIREN_FROM_PIREN_ENU
+            pos = H.dot(np.r_[pos, 1])[:3].T
+
+            t_pos_ori.append([timestamp_msg, pos, ori_quat])
+    # pos is here relative to piren, which is NED
+    return t_pos_ori
+
+
+def gen_ma2_pos_enu():
+    positions_ned = []
+    ma2_gnss_ned = gen_ma2_gnss_ned()
+    timestamps = []
+    ori_quats = []
+    for gnss_t, pos_ned, ori_quat in ma2_gnss_ned:
+        positions_ned.append(pos_ned)
+        timestamps.append(gnss_t)
+        ori_quats.append(ori_quat)
+    positions_ned_np = np.array(positions_ned)
+
+    H = H_POINTS_PIREN_ENU_FROM_PIREN
+    #H = np.eye(4)
+    pos_enu = H.dot(np.r_[positions_ned_np.T, np.ones((1, positions_ned_np.shape[0]))])[0:3, :].T
+    pos_enu_with_timestamps = np.hstack((pos_enu, np.array(timestamps).reshape(-1, 1)))
+    return pos_enu_with_timestamps, ori_quats
 
 
 def transform_from_image_plane_to_3d(xyz_c):

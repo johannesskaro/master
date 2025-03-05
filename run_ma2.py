@@ -21,6 +21,7 @@ import json
 from run_3d_viz import plot_scene, animate
 import os
 from plotting import *
+from utilities_map import *
 
 #matplotlib.use('Agg')
 
@@ -37,6 +38,8 @@ save_3d_stixels = False
 save_3d_visualization_video = False
 save_cost_video = False
 write_BEV_to_file = False
+plot_map = False
+save_map_video = False
 
 dataset = "ma2"
 sequence = "scen4_2"
@@ -73,7 +76,7 @@ if save_polygon_video:
 if save_3d_visualization_video:
     fourcc = cv2.VideoWriter_fourcc(*"MP4V")  # You can also use 'MP4V' for .mp4 format
     out_3d_visualization = cv2.VideoWriter(
-        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_3d_visualization_v24.mp4",
+        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_3d_visualization_v4.mp4",
         fourcc,
         FPS,
         (1280, 720),
@@ -87,6 +90,15 @@ if save_cost_video:
         FPS,
         (W, H),
         isColor=False
+    )
+
+if save_map_video:
+    fourcc = cv2.VideoWriter_fourcc(*"MP4V")  # You can also use 'MP4V' for .mp4 format
+    out_map = cv2.VideoWriter(
+        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_GNSS_map_v4.mp4",
+        fourcc,
+        FPS,
+        (H, H),
     )
 
 
@@ -116,6 +128,9 @@ def main():
     gen_lidar = gen_ma2_lidar_points()
     gen_svo = gen_svo_images()
     gen_lidar_in_image = gen_ma2_lidar_depth_image()
+    ma2_pos, ma2_ori = gen_ma2_pos_enu()
+    gnss_points = []
+    #ma2_pose_ned = gen_ma2_gnss_ned()
 
     next_ma2_timestamp, next_ma2_lidar_points, intensity, xyz_c = next(gen_lidar)
     next_svo_timestamp, next_svo_image, disparity_img, depth_img = next(gen_svo)
@@ -185,10 +200,19 @@ def main():
         if lidar_update and lidar_update_prev:
             continue
         lidar_update_prev = lidar_update
-        
+
         #print(f"Current timestamp: {current_timestamp}")
         curr_frame += 1
         print(f"Frame: {curr_frame}")
+
+        ma2_idx, _ = ut.find_closest_timestamp(ma2_pos[:,-1], current_timestamp)
+        ma2_curr_pos = ma2_pos[ma2_idx]
+        ma2_curr_ori = ma2_ori[ma2_idx]
+        gnss_points.append([ma2_curr_pos[1], ma2_curr_pos[0]])
+
+        #print(ma2_curr_ori)
+
+        #print(f"Current position: {ma2_curr_pos[:2]}")
 
         left_img = next_svo_image
         lidar_image_points = np.squeeze(next_ma2_lidar_points, axis=1)  # From (N, 1, 2) to (N, 2)
@@ -314,10 +338,11 @@ def main():
             water_img, blue_water_mask, pink_color, alpha1=1, alpha2=0.5
         )
 
-        #free_space_boundary, free_space_boundary_mask = stixels.get_free_space_boundary(water_mask)
+        free_space_boundary, free_space_boundary_mask = stixels.get_free_space_boundary(water_mask)
 
         #sam_masks = fastsam.get_all_masks(left_img, device=device)
         #sam_masks_overlay = plot_sam_masks_cv2(left_img, sam_masks)
+        #cv2.imwrite("images/sam_masks_overlay.png", sam_masks_overlay)
 
         #sam_contours = fastsam.get_all_countours(left_img, device=device, min_area=4000)
         #cv2.imshow("SAM contours", sam_contours.astype(np.uint8))
@@ -327,7 +352,8 @@ def main():
         #sam_contours = ut.get_bottommost_line(sam_contours)
         #cv2.imshow("SAM upper contours", sam_contours.astype(np.uint8))
 
-        #sam_masks_and_contours = ut.blend_image_with_mask(left_img, sam_contours, [0, 0, 255], alpha1=0.5, alpha2=1)
+        #sam_masks_and_contours = ut.blend_image_with_mask(left_img, sam_contours, [0, 0, 255], alpha1=1, alpha2=1)
+        #cv2.imwrite("images/sam_masks_and_contours.png", sam_masks_and_contours)
         #cv2.imshow("SAM masks and contours", sam_masks_and_contours)
 
         #normalized_disparity = cv2.normalize(disparity_img, None, 0, 255, cv2.NORM_MINMAX)
@@ -336,17 +362,25 @@ def main():
         #grad_y = cv2.Sobel(blurred_image, cv2.CV_64F, 0, 1, ksize=5)
         #grad_y = cv2.convertScaleAbs(grad_y)
         #_, grad_y = cv2.threshold(grad_y, 75, 255, cv2.THRESH_BINARY)
-        #grad_y = ut.filter_mask_by_boundary(grad_y, free_space_boundary, offset=10)
+        #grad_y = ut.filter_mask_by_boundary(grad_y, free_space_boundary, offset=0)
         #grad_y = ut.get_bottommost_line(grad_y)
         
-        #grad_y_blended = ut.blend_image_with_mask(left_img, grad_y, [0, 255, 0], alpha1=0.7, alpha2=1)
-        #cv2.imshow("grad_y", grad_y_blended.astype(np.uint8))
-        #colored_disparity = cv2.applyColorMap(normalized_disparity, cv2.COLORMAP_JET)
+        #grad_y_blended = ut.blend_image_with_mask(left_img, grad_y, [0, 255, 0], alpha1=1, alpha2=1)
+        #cv2.imwrite("images/grad_y_image.png", grad_y)
+        #cv2.imshow("grad_y", grad_y.astype(np.uint8))
+        #colored_disparity = cv2.applyColorMap(normalized_disparity, cv2.COLORMAP_RAINBOW)
         #cv2.imshow("colored_disparity", colored_disparity)
+        #cv2.imwrite("images/colored_disparity.png", colored_disparity)
+        #cv2.imwrite("images/left_img.png", left_img)
 
 
 
-        rec_stixel_list, rec_stixel_mask, cost_map = stixels.create_rectangular_stixels_3(water_mask, disparity_img, depth_img, sam_contours)
+        rec_stixel_list, rec_stixel_mask, cost_map, boundary_mask = stixels.create_rectangular_stixels_3(water_mask, disparity_img, depth_img, sam_contours)
+        #boundary_mask = ut.get_bottommost_line(boundary_mask, thickness=7)
+        #boundary_mask_blended = ut.blend_image_with_mask(left_img, boundary_mask, [0, 255, 255], alpha1=1, alpha2=1)
+        #cv2.imwrite("images/boundary_mask_blended.png", boundary_mask_blended)
+
+        #cv2.imwrite("images/membership_map.png", cost_map.astype(np.uint8))
         
 
         #rec_stixel_list, rec_stixel_mask = stixels.create_stixels(disparity_img, depth_img, free_space_boundary, cam_params) 
@@ -363,6 +397,13 @@ def main():
     
         #rec_stixel_list = stixels.create_stixels_from_lidar_depth_image_2(lidar_depth_image, scanline_to_img_row, img_row_to_scanline, free_space_boundary)
 
+        if plot_map:
+            
+            plot_gnss_iteration(gnss_points, ma2_curr_ori, stixels_2d_points)
+
+        if save_map_video:
+            map_image = plot_gnss_iteration_video(gnss_points, ma2_curr_ori, stixels_2d_points)
+            out_map.write(map_image)
 
         if write_BEV_to_file:
 
@@ -521,6 +562,8 @@ def main():
         out_polygon.release()
     if save_3d_visualization_video:
         out_3d_visualization.release()
+    if save_map_video:
+        out_map.release()
 
 
 if __name__ == "__main__":

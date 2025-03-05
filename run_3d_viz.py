@@ -72,7 +72,7 @@ def create_filling_stixels(stixels_3d_points):
 
     return stixels_with_gaps
 
-def set_stixels_base_to_zero(stixels_3d_points):
+def set_stixels_base_to_zero(stixels_3d_points, cam_height):
 
     stixel_vertices = np.array(stixels_3d_points)
     stixel_vertices = stixel_vertices[:, :, [2, 0, 1]]  # Swap axes for better visualization
@@ -80,10 +80,20 @@ def set_stixels_base_to_zero(stixels_3d_points):
 
     # Place the stixels on the ground plane
     for n, vertices in enumerate(stixel_vertices):
-        stixel_vertices[n,0,2] = vertices[0,2] - vertices[3,2]
-        stixel_vertices[n,1,2] = vertices[1,2] - vertices[2,2]
-        stixel_vertices[n,2,2] = vertices[2,2] - vertices[2,2]
-        stixel_vertices[n,3,2] = vertices[3,2] - vertices[3,2]
+
+        below_zero_right = max(0, cam_height - vertices[2,2])
+        below_zero_left = max(0, cam_height - vertices[3,2])
+        
+
+        print(vertices[0,2])
+
+        #stixel_vertices[n,0,2] = vertices[0,2] - vertices[3,2] #- below_zero_left
+        #stixel_vertices[n,1,2] = vertices[1,2] - vertices[2,2] #- below_zero_right
+        #stixel_vertices[n,2,2] = vertices[2,2] - vertices[2,2]
+        #stixel_vertices[n,3,2] = vertices[3,2] - vertices[3,2]
+        stixel_vertices[n,2,2] = 0
+        stixel_vertices[n,3,2] = 0 
+
 
     return stixel_vertices
 
@@ -97,7 +107,7 @@ def plot_scene(ax, stixel_3d_points, water_surface_polygon_points, plane_params,
     height = d / normal_length
 
     depth_min = 0
-    depth_max = 60 #60
+    depth_max = 20 #60
     norm = mcolors.Normalize(vmin=depth_min, vmax=depth_max)
     cmap = cm.gist_earth  #gist_rainbow  # Choose any color map you prefer (e.g., viridis, plasma, coolwarm)
     ax.clear()
@@ -129,7 +139,7 @@ def plot_scene(ax, stixel_3d_points, water_surface_polygon_points, plane_params,
     ax.add_collection3d(polygon)
 
     stixel_vertices = np.array(stixel_3d_points)
-    stixel_vertices = set_stixels_base_to_zero(stixel_vertices)
+    stixel_vertices = set_stixels_base_to_zero(stixel_vertices, height)
     stixel_vertices = np.array(create_filling_stixels(stixel_vertices))
 
     # Plot each surface element
@@ -153,13 +163,13 @@ def plot_scene(ax, stixel_3d_points, water_surface_polygon_points, plane_params,
     ax.dist = camera_distance  # Smaller values bring the camera closer
 
     # Set plot limits
-    ax.set_xlim(20, 0)
-    ax.set_ylim(-10, 10)
-    ax.set_zlim(-1, 8)
+    #ax.set_xlim(20, 0)
+    #ax.set_ylim(-10, 10)
+    #ax.set_zlim(-1, 8)
 
- #   ax.set_xlim(10, 0)
-  #  ax.set_ylim(-5, 5)
-  #  ax.set_zlim(-1, 5)
+    ax.set_xlim(10, 0)
+    ax.set_ylim(-5, 5)
+    ax.set_zlim(-1, 5)
 
     ax.grid(False)
     ax._axis3don = False  # Hide the 3D axis lines

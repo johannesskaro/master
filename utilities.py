@@ -568,3 +568,7 @@ def write_coordinates_to_file(filename, frame, coordinates):
     with open(filename, 'a') as file:
         json.dump(data, file)
         file.write("\n")
+
+def find_closest_timestamp(timestamps, target_timestamp):
+    idx = np.abs(timestamps - target_timestamp).argmin()
+    return idx, timestamps[idx]

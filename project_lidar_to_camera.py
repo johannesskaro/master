@@ -106,7 +106,7 @@ def merge_lidar_onto_image(image, lidar_points, lidar_3d_points=None, intensitie
 
     # Blend the original image and the lidar overlay
     alpha = 1  # Weight of the original image
-    beta = 0.7   # Weight of the overlay
+    beta = 0.8   # Weight of the overlay
     gamma = 0.0  # Scalar added to each sum
     image_with_lidar = cv2.addWeighted(image_with_lidar, alpha, lidar_overlay, beta, gamma)
 
