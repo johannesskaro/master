@@ -4,6 +4,7 @@ from scipy.io import loadmat
 from stixels import *
 from RWPS import RWPS
 from fastSAM import FastSAMSeg
+from yolo import YoloSeg
 from ultralytics import YOLO
 from rosbags.rosbag2 import Reader
 from rosbags.serde import deserialize_cdr
@@ -46,7 +47,7 @@ sequence = "scen4_2"
 mode = "fastsam" #"fastsam" #"rwps" #"fusion"
 iou_threshold = 0.1
 fastsam_model_path = "weights/FastSAM-x.pt"
-yolo_model_path = "weights/yolo11x-seg.pt"
+yolo_model_path = "weights/yolo11n-seg.pt"
 device = "cuda"
 src_dir = r"C:\Users\johro\Documents\BB-Perception\master"
 
@@ -67,7 +68,7 @@ if save_video:
 if save_polygon_video:
     fourcc = cv2.VideoWriter_fourcc(*"MP4V")  # You can also use 'MP4V' for .mp4 format
     out_polygon = cv2.VideoWriter(
-        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_polygon_BEV_improved_stixels_v24.mp4",
+        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_polygon_BEV_improved_stixels_v25.mp4",
         fourcc,
         FPS,
         (H, H),
@@ -76,7 +77,7 @@ if save_polygon_video:
 if save_3d_visualization_video:
     fourcc = cv2.VideoWriter_fourcc(*"MP4V")  # You can also use 'MP4V' for .mp4 format
     out_3d_visualization = cv2.VideoWriter(
-        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_3d_visualization_v4.mp4",
+        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_3d_visualization_v25.mp4",
         fourcc,
         FPS,
         (1280, 720),
@@ -85,7 +86,7 @@ if save_3d_visualization_video:
 if save_cost_video:
     fourcc = cv2.VideoWriter_fourcc(*"MP4V")  # You can also use 'MP4V' for .mp4 format
     out_cost = cv2.VideoWriter(
-        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_cost_map_v24.mp4",
+        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_cost_map_v25.mp4",
         fourcc,
         FPS,
         (W, H),
@@ -95,7 +96,7 @@ if save_cost_video:
 if save_map_video:
     fourcc = cv2.VideoWriter_fourcc(*"MP4V")  # You can also use 'MP4V' for .mp4 format
     out_map = cv2.VideoWriter(
-        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_GNSS_map_v4.mp4",
+        f"{src_dir}/results/video_{dataset}_{mode}_{sequence}_GNSS_map_v6.mp4",
         fourcc,
         FPS,
         (H, H),
@@ -106,7 +107,7 @@ fastsam = FastSAMSeg(model_path=fastsam_model_path)
 rwps3d = RWPS()
 stixels = Stixels()
 temporal_smoothing = TemporalSmoothing(5, K)
-#yolo_model = YOLO(yolo_model_path)
+yolo = YoloSeg(model_path=yolo_model_path)
  
 cam_params = {"cx": K[0,2], "cy": K[1,2], "fx": K[0,0], "fy":K[1,1], "b": baseline}
 P1 = K @ np.hstack((np.eye(3), np.zeros((3, 1))))
@@ -130,7 +131,7 @@ def main():
     gen_lidar_in_image = gen_ma2_lidar_depth_image()
     ma2_pos, ma2_ori = gen_ma2_pos_enu()
     gnss_points = []
-    #ma2_pose_ned = gen_ma2_gnss_ned()
+    gnss_oris = []
 
     next_ma2_timestamp, next_ma2_lidar_points, intensity, xyz_c = next(gen_lidar)
     next_svo_timestamp, next_svo_image, disparity_img, depth_img = next(gen_svo)
@@ -197,9 +198,12 @@ def main():
         else:
             break
 
-        if lidar_update and lidar_update_prev:
-            continue
-        lidar_update_prev = lidar_update
+        #if lidar_update:
+        #    continue
+
+        #if lidar_update and lidar_update_prev:
+        #    continue
+        #lidar_update_prev = lidar_update
 
         #print(f"Current timestamp: {current_timestamp}")
         curr_frame += 1
@@ -209,6 +213,7 @@ def main():
         ma2_curr_pos = ma2_pos[ma2_idx]
         ma2_curr_ori = ma2_ori[ma2_idx]
         gnss_points.append([ma2_curr_pos[1], ma2_curr_pos[0]])
+        gnss_oris.append(ma2_curr_ori)
 
         #print(ma2_curr_ori)
 
@@ -218,8 +223,21 @@ def main():
         lidar_image_points = np.squeeze(next_ma2_lidar_points, axis=1)  # From (N, 1, 2) to (N, 2)
         lidar_3d_points = xyz_c
 
+        #yolo_results = yolo_model(left_img)
+        #yolo_results = yolo_model.predict(left_img, show=True)
+        #print(yolo_results.shape)
+        #plot_yolo_masks(left_img, yolo_results)
+
+
+
+        boat_mask = yolo.get_boat_mask(left_img)
 
         (H, W, D) = left_img.shape
+
+        #boat_mask = np.zeros((H,W))
+
+
+
 
         # Run RWPS segmentation
         rwps_mask_3d, plane_params_3d, rwps_succeded = rwps3d.segment_water_plane_using_point_cloud(
@@ -338,7 +356,13 @@ def main():
             water_img, blue_water_mask, pink_color, alpha1=1, alpha2=0.5
         )
 
-        free_space_boundary, free_space_boundary_mask = stixels.get_free_space_boundary(water_mask)
+        #water_mask_not_refined = water_mask
+        water_mask = yolo.refine_water_mask(boat_mask, water_mask)
+
+        #cv2.imshow("Water mask refined", water_mask*255)
+        #cv2.imshow("Water mask not refined", water_mask_not_refined.astype(np.uint8)*255)
+
+        #free_space_boundary, free_space_boundary_mask = stixels.get_free_space_boundary(water_mask)
 
         #sam_masks = fastsam.get_all_masks(left_img, device=device)
         #sam_masks_overlay = plot_sam_masks_cv2(left_img, sam_masks)
@@ -375,7 +399,7 @@ def main():
 
 
 
-        rec_stixel_list, rec_stixel_mask, cost_map, boundary_mask = stixels.create_rectangular_stixels_3(water_mask, disparity_img, depth_img, sam_contours)
+        rec_stixel_list, rec_stixel_mask, cost_map, boundary_mask = stixels.create_rectangular_stixels_3(water_mask, disparity_img, depth_img, sam_contours, boat_mask)
         #boundary_mask = ut.get_bottommost_line(boundary_mask, thickness=7)
         #boundary_mask_blended = ut.blend_image_with_mask(left_img, boundary_mask, [0, 255, 255], alpha1=1, alpha2=1)
         #cv2.imwrite("images/boundary_mask_blended.png", boundary_mask_blended)
@@ -399,10 +423,12 @@ def main():
 
         if plot_map:
             
-            plot_gnss_iteration(gnss_points, ma2_curr_ori, stixels_2d_points)
+            #plot_gnss_iteration(gnss_points, ma2_curr_ori, stixels_2d_points, stixels.pmo_list)
+            stixel_2d_points_list = stixels.get_stixel_2d_points_N_frames()
+            plot_previous_gnss_iterations_local(gnss_points, gnss_oris, stixel_2d_points_list)
 
         if save_map_video:
-            map_image = plot_gnss_iteration_video(gnss_points, ma2_curr_ori, stixels_2d_points)
+            map_image = plot_gnss_iteration_video(gnss_points, ma2_curr_ori, stixels_2d_points, stixels.pmo_list)
             out_map.write(map_image)
 
         if write_BEV_to_file:

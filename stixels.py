@@ -11,13 +11,14 @@ import json
 
 class Stixels:
 
-    N = 10
+    N = 200
     stixel_2d_points_N_frames = deque(maxlen=N)
     
     stixel_indices = []
     prev_stixel_indices = []
     filtered_3d_points = []
     prev_filtered_3d_points = []
+    stixel_2D_points_list = []
     
 
     def __init__(self, num_of_stixels = 192) -> None:  #96 stixels
@@ -26,6 +27,7 @@ class Stixels:
         self.prev_rectangular_stixel_list = self.rectangular_stixel_list
         self.fused_stixel_depth_list = [[np.nan] for _ in range(num_of_stixels)]
         self.prev_fused_stixel_depth_list = self.fused_stixel_depth_list
+        self.pmo_list = np.zeros(self.num_stixels)
         
 
     def get_stixel_2d_points_N_frames(self) -> np.array:
@@ -87,9 +89,10 @@ class Stixels:
         return stixel_mask, stixel_positions
     
     
-    def create_rectangular_stixels_3(self, water_mask, disparity_map, depth_map, sam_countours):
+    def create_rectangular_stixels_3(self, water_mask, disparity_map, depth_map, sam_countours, boat_mask):
 
         self.prev_rectangular_stixel_list = self.rectangular_stixel_list
+
         free_space_boundary, _ = self.get_free_space_boundary(water_mask)
         stixel_width = self.get_stixel_width(water_mask.shape[1])
         height, width = disparity_map.shape
@@ -97,7 +100,6 @@ class Stixels:
         max_stixel_height = 500
 
         cost_map, free_space_boundary_depth, cost_map_resized = self.create_cost_map_2(disparity_map, depth_map, free_space_boundary, sam_countours)
-        #cost_map, free_space_boundary_depth, membership_image = self.create_cost_map_3(disparity_map, depth_map, free_space_boundary, sam_countours)
         top_boundary, boundary_mask = self.get_optimal_height(cost_map, free_space_boundary_depth, free_space_boundary)
 
         boundary_mask = cv2.resize(boundary_mask, (width, height), interpolation=cv2.INTER_NEAREST)
@@ -119,6 +121,14 @@ class Stixels:
                 v_top = v_f - min_stixel_height
             elif (v_f - v_top) > max_stixel_height:
                 v_top = v_f - max_stixel_height
+
+            roi = boat_mask[v_top:v_f, stixel_range]
+            boat_pixels = np.sum(roi > 0)
+            total_pixels = roi.size
+            if boat_pixels > (total_pixels / 2):
+                self.pmo_list[n] = 1
+            else:
+                self.pmo_list[n] = 0
 
             stixel_median_depth = np.nanmedian(depth_map[v_top:v_f, stixel_range])
             stixel_median_disp = np.nanmedian(disparity_map[v_top:v_f, stixel_range])
@@ -147,7 +157,7 @@ class Stixels:
         #cv2.imshow("grad_y", grad_y.astype(np.uint8) * 255)
         grad_y = ut.get_bottommost_line(grad_y)
 
-        sam_contours = ut.filter_mask_by_boundary(sam_contours, free_space_boundary, offset=10)
+        sam_contours = ut.filter_mask_by_boundary(sam_contours, free_space_boundary, offset=15)
         sam_contours = sam_contours.astype(np.float32) / 255.0
         sam_contours = ut.get_bottommost_line(sam_contours)
         #cv2.imshow("sam_contours", sam_contours.astype(np.uint8)*255)
@@ -231,7 +241,7 @@ class Stixels:
         cost_map = cost_map.astype(np.uint8)
 
         cost_map_resized = cv2.resize(-cost_map, (width, height), interpolation=cv2.INTER_NEAREST)
-        cv2.imshow("Cost Map", cost_map_resized)
+        #cv2.imshow("Cost Map", cost_map_resized)
         #cv2.imshow("grad_y", grad_y.astype(np.uint8) * 255)
         #colored_disparity = cv2.applyColorMap(normalized_disparity, cv2.COLORMAP_JET)
         #cv2.imshow("colored_disparity", colored_disparity)
@@ -863,7 +873,7 @@ class Stixels:
                 elif right_idx is not None:
                     filled[i] = filled[right_idx]
 
-        return np.array(stixel_depths)
+        return np.array(filled)
     
     
     def calculate_2d_points_from_stixel_positions(stixel_positions, stixel_width, depth_map, cam_params):
@@ -906,8 +916,8 @@ class Stixels:
         for n, stixel in enumerate(self.rectangular_stixel_list):
             px = stixel[2]
             z_stereo = stixel[3]
-            z_lidar = lidar_stixel_depths[n]
 
+            z_lidar = lidar_stixel_depths[n]
             z_prev = self.prev_fused_stixel_depth_list[n]
 
             #print(z_stereo)
@@ -973,6 +983,9 @@ class Stixels:
         # Sort points by angle to create a continuous polygon boundary
         sorted_indices = np.argsort(angles)
         points_2d_sorted = points_2d[sorted_indices]
+        self.pmo_list = self.pmo_list[sorted_indices]
+
+        self.add_stixel_2d_points(points_2d_sorted)
 
         return points_2d_sorted
     

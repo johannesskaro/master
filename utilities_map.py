@@ -1,6 +1,8 @@
 import json
 from shapely.geometry import LineString
 import matplotlib.pyplot as plt
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+from scipy.ndimage import rotate
 from pyproj import Transformer
 from scipy.spatial.transform import Rotation as R
 import math
@@ -46,7 +48,7 @@ def plot_line_strings(ax, line_strings, origin=[0, 0]):
     #plt.show()
 
     return ax
-def plot_gnss_iteration(gnss_pos, gnss_ori, stixel_points):
+def plot_gnss_iteration(gnss_pos, gnss_ori, stixel_points, pmo_list):
 
     origin = ORIGIN
     line_strings = LINE_STRINGS
@@ -64,39 +66,65 @@ def plot_gnss_iteration(gnss_pos, gnss_ori, stixel_points):
     gnss_x = [pt[0] for pt in gnss_pos]
     gnss_y = [pt[1] for pt in gnss_pos]
 
-    alphas = [0.2 + 0.8*(i/(n-1)) if n > 1 else 1 for i in range(n)]
 
-    for xi, yi, a in zip(gnss_x, gnss_y, alphas):
-        plt.scatter(xi, yi, color=(1, 0, 0, a), s=25)
 
+    #alphas = [0.3 + 0.4*(i/(n-1)) if n > 1 else 1 for i in range(n)]
+
+    #for i, (xi, yi, a) in enumerate(zip(gnss_x, gnss_y, alphas)):
+     #   if i == 0:
+     #       plt.scatter(xi, yi, color='green', alpha=a, s=25, label="Ferry Position")
+     #   else:
+    #        plt.scatter(xi, yi, color='green', alpha=a, s=25)
+
+    
 
     r = R.from_quat(gnss_ori)
     euler_angles = r.as_euler('xyz', degrees=False)
     yaw = euler_angles[2]
-    boat_position = gnss_pos[-1]    
-    stixel_points_global = transform_stixel_points(stixel_points, boat_position, yaw)
+    boat_position = gnss_pos[-1]   
 
-    xs, ys = zip(*stixel_points_global)
+    plt.scatter(boat_position[0], boat_position[1], color='green', label="Ego Vessel") 
+
+
+    boat_img = plt.imread("icons/ferry.png")
+    rotation_angle = math.degrees(- yaw)
+    rotated_boat_img = rotate(boat_img, angle=rotation_angle, reshape=True)
+    rotated_boat_img = np.clip(rotated_boat_img, 0, 1)
+    img_box = OffsetImage(rotated_boat_img, zoom=0.07)
+    ab = AnnotationBbox(img_box, boat_position, frameon=False, box_alignment=(0.5, 0.5))
+    ab.set_zorder(-10)
+
+    stixel_points_global_poly = transform_stixel_points(stixel_points, boat_position, yaw)
+    stixel_points_global = stixel_points_global_poly[:len(pmo_list)]
+
+    xs, ys = zip(*stixel_points_global_poly)
     plt.fill(xs, ys, color='cyan', alpha=0.3, label="Free Space")
-    plt.plot(xs, ys, marker='o', color='cyan')
+    #plt.plot(xs, ys, color='cyan')
+
+    for (x, y), pmo in zip(stixel_points_global, pmo_list):
+        if pmo == 1:
+            plt.scatter(x, y, color='red', marker='o', s=25, label="Boats" if 'Boats' not in plt.gca().get_legend_handles_labels()[1] else "")
+        else:
+            plt.scatter(x, y, color='blue', marker='o', s=25, label="Static objects" if 'Static objects' not in plt.gca().get_legend_handles_labels()[1] else "")
     
     plt.xlabel("East (m)")
     plt.ylabel("North (m)")
-    plt.title("GNSS Data and Free Space")
+    plt.title("Free Space Estimation")
     ax = plt.gca()
+    ax.add_artist(ab)
     ax.invert_yaxis()
     ax.invert_xaxis()
-    #plt.grid(True)
+    plt.legend()
     plt.show(block=False)
     plt.pause(1)  # Display the plot for a short period
     plt.close()
 
-def plot_gnss_iteration_video(gnss_pos, gnss_ori, stixel_points):
+def plot_gnss_iteration_video(gnss_pos, gnss_ori, stixel_points, pmo_list):
 
     origin = ORIGIN
     line_strings = LINE_STRINGS
 
-    #plt.figure(figsize=(8, 8))
+    #fig = plt.figure(figsize=(8, 8))
 
     width, height = 1080, 1080
     dpi = 100
@@ -109,36 +137,60 @@ def plot_gnss_iteration_video(gnss_pos, gnss_ori, stixel_points):
         y = [yi - origin[1] for yi in y]
         ax.plot(x, y, color='black', linestyle='-')
     
-    n = len(gnss_pos)
+    #n = len(gnss_pos)
 
-    gnss_x = [pt[0] for pt in gnss_pos]
-    gnss_y = [pt[1] for pt in gnss_pos]
+    #gnss_x = [pt[0] for pt in gnss_pos]
+    #gnss_y = [pt[1] for pt in gnss_pos]
 
-    alphas = [0.2 + 0.8*(i/(n-1)) if n > 1 else 1 for i in range(n)]
+    #alphas = [0.2 + 0.8*(i/(n-1)) if n > 1 else 1 for i in range(n)]
 
-    for xi, yi, a in zip(gnss_x, gnss_y, alphas):
-        plt.scatter(xi, yi, color=(1, 0, 0, a), s=25)
+    #for xi, yi, a in zip(gnss_x, gnss_y, alphas):
+     #   plt.scatter(xi, yi, color=(1, 0, 0, a), s=25)
 
 
     r = R.from_quat(gnss_ori)
     euler_angles = r.as_euler('xyz', degrees=False)
     yaw = euler_angles[2]
-    boat_position = gnss_pos[-1]    
-    stixel_points_global = transform_stixel_points(stixel_points, boat_position, yaw)
+    boat_position = gnss_pos[-1]
 
-    xs, ys = zip(*stixel_points_global)
+    boat_img = plt.imread("icons/ferry.png")
+    rotation_angle = math.degrees(- yaw)
+    rotated_boat_img = rotate(boat_img, angle=rotation_angle, reshape=True)
+    rotated_boat_img = np.clip(rotated_boat_img, 0, 1)
+    img_box = OffsetImage(rotated_boat_img, zoom=0.08)
+    ab = AnnotationBbox(img_box, boat_position, frameon=False, box_alignment=(0.5, 0.5))
+    ab.set_zorder(-10)
+
+
+
+    stixel_points_global_poly = transform_stixel_points(stixel_points, boat_position, yaw)
+    stixel_points_global = stixel_points_global_poly[:len(pmo_list)]
+
+    xs, ys = zip(*stixel_points_global_poly)
     ax.fill(xs, ys, color='cyan', alpha=0.3, label="Free Space")
-    ax.plot(xs, ys, marker='o', color='cyan')
+    ax.plot(xs, ys, color='cyan', zorder=-10)
+
+    plt.scatter(boat_position[0], boat_position[1], s=50, color='green', label="Ego Vessel")
+
+    for (x, y), pmo in zip(stixel_points_global, pmo_list):
+        if pmo == 1:
+            plt.scatter(x, y, color='red', marker='o', s=50, label="Boat" if 'Boat' not in plt.gca().get_legend_handles_labels()[1] else "")
+        else:
+            plt.scatter(x, y, color='blue', marker='o', s=50, label="Static Object" if 'Static Object' not in plt.gca().get_legend_handles_labels()[1] else "")
     
-    ax.set_xlabel("East (m)")
-    ax.set_ylabel("North (m)")
-    ax.set_title("GNSS Data and Free Space")
+    ax.set_xlabel("East [m]", fontsize=16)
+    ax.set_ylabel("North [m]", fontsize=16)
+    #ax.set_title("Free Space Estimation")
+    ax.add_artist(ab)
     ax.invert_yaxis()
     ax.invert_xaxis()
     #plt.grid(True)
     #plt.show(block=False)
     #plt.pause(1)  # Display the plot for a short period
     #plt.close()
+
+    ax.tick_params(axis='both', which='major', labelsize=14)
+    plt.legend(fontsize=14)
 
     fig.canvas.draw()
     img = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
@@ -147,6 +199,175 @@ def plot_gnss_iteration_video(gnss_pos, gnss_ori, stixel_points):
 
     plt.close(fig)
     return img_bgr
+
+
+def plot_previous_gnss_iterations(gnss_pos_list, gnss_ori_list, stixel_points_list):
+    origin = ORIGIN
+    line_strings = LINE_STRINGS
+
+    plt.figure(figsize=(8, 8))
+
+    for ls in line_strings:
+        x, y = ls.xy
+        x = [xi - origin[0] for xi in x]
+        y = [yi - origin[1] for yi in y]
+        #plt.plot(x, y, color='black', linestyle='-')
+    
+    n = len(gnss_pos_list[-1])
+    gnss_x = [pt[0] for pt in gnss_pos_list]
+    gnss_y = [pt[1] for pt in gnss_pos_list]
+
+    alphas = [0.2 + 0.8*(i/(n-1)) if n > 1 else 1 for i in range(n)]
+
+    for xi, yi, a in zip(gnss_x, gnss_y, alphas):
+        plt.scatter(xi, yi, color=(0, 0, 1, a), s=50)
+
+    
+    cmap = plt.get_cmap("jet")
+    num_scans = len(stixel_points_list)
+
+    for i, stixel_points in enumerate(reversed(stixel_points_list)):
+
+        pos = gnss_pos_list[-1-i]
+        ori = gnss_ori_list[-1-i]
+        r = R.from_quat(ori)
+        euler_angles = r.as_euler('xyz', degrees=False)
+        yaw = euler_angles[2]
+
+        stixel_points_global = transform_stixel_points(stixel_points, pos, yaw)
+
+        xs, ys = zip(*stixel_points_global)
+
+        color = cmap(i/num_scans)
+
+        scan_alpha = 0.1 + 0.5*(i/num_scans)
+        #plt.fill(xs, ys, color='cyan', alpha=scan_alpha, label=f"Scan {num_scans-i}")
+        plt.scatter(xs, ys, color='blue', s=50, alpha=scan_alpha, label=f"Scan {num_scans-i}")
+        
+        
+    plt.xlabel("East (m)")
+    plt.ylabel("North (m)")
+    #plt.title("GNSS Data and Free Space")
+    ax = plt.gca()
+    #ax.invert_yaxis()
+    #ax.invert_xaxis()
+    #plt.grid(True)
+    plt.legend()
+    plt.show(block=False)
+    plt.pause(1)  # Display the plot for a short period
+    plt.close()
+
+
+def plot_previous_gnss_iterations_local(gnss_pos_list, gnss_ori_list, stixel_points_list):
+
+    offset_y = - TRANS_FLOOR_TO_LIDAR[0]
+    offset_x = - TRANS_FLOOR_TO_LIDAR[1]
+
+    plt.figure(figsize=(8, 8))
+
+    curr_boat_pos = gnss_pos_list[-1]
+    curr_boat_ori = gnss_ori_list[-1]
+    r = R.from_quat(curr_boat_ori)
+    euler_angles = r.as_euler('xyz', degrees=False)
+    curr_heading = euler_angles[2]
+
+    n = len(gnss_pos_list[-1])
+    cam_pos_list = []
+
+    for i, gnss_pos in enumerate(gnss_pos_list):
+
+        ori = gnss_ori_list[i]
+        r = R.from_quat(ori)
+        euler_angles = r.as_euler('xyz', degrees=False)
+        heading = euler_angles[2]
+        
+        corrected_heading = - heading + math.pi
+
+        R_corrected = rotation_matrix(corrected_heading)
+
+        offset_vec = np.array([offset_x, offset_y])
+        rotated_offset = R_corrected.dot(offset_vec)
+
+        curr_cam_pos_x = curr_boat_pos[0] + rotated_offset[0]
+        curr_cam_pos_y = curr_boat_pos[1] + rotated_offset[1]
+
+        cam_pos_x_global = gnss_pos[0] + rotated_offset[0]
+        cam_pos_y_global = gnss_pos[1] + rotated_offset[1]
+
+        rel_x = cam_pos_x_global - curr_cam_pos_x
+        rel_y = cam_pos_y_global - curr_cam_pos_y
+
+        rel_vec = np.array([rel_x, rel_y])
+        R_heading = rotation_matrix(curr_heading)
+        rotated_rel = R_heading.dot(rel_vec)
+        cam_x_local, cam_y_local = - rotated_rel
+
+        cam_pos_list.append((cam_x_local, cam_y_local))
+
+
+    gnss_x = [pt[0] for pt in cam_pos_list]
+    gnss_y = [pt[1] for pt in cam_pos_list]
+    
+    for xi, yi in zip(gnss_x, gnss_y):
+        plt.scatter(xi, yi, color='green', s=10)
+
+    
+    cmap = plt.get_cmap("jet")
+    num_scans = len(stixel_points_list)
+
+    curr_pos = gnss_pos_list[-1]
+    curr_ori = gnss_ori_list[-1]
+    r = R.from_quat(curr_ori)
+    euler_angles = r.as_euler('xyz', degrees=False)
+    curr_yaw = euler_angles[2]
+
+    for i, stixel_points in enumerate(stixel_points_list):
+
+        pos = gnss_pos_list[i]
+        ori = gnss_ori_list[i]
+        r = R.from_quat(ori)
+        euler_angles = r.as_euler('xyz', degrees=False)
+        yaw = euler_angles[2]
+
+        stixel_points_local = transform_stixel_points_local(stixel_points, pos, yaw, curr_pos, curr_yaw)
+        #stixel_points_local = stixel_points
+
+        xs, ys = zip(*stixel_points_local)
+        color = cmap(i/num_scans)
+
+        scan_alpha = 0.01 + 0.3*(i/num_scans)**3
+        #plt.fill(xs, ys, color='cyan', alpha=scan_alpha, label=f"Scan {num_scans-i}")
+        #plt.scatter(xs, ys, color='blue', s=50, alpha=scan_alpha, label=f"Scan {num_scans-i}")
+        label = "Stixels" if i == len(stixel_points_list) - 1 else ""
+        plt.scatter(xs, ys, color='blue', s=10, alpha=scan_alpha, label=label)
+
+
+    plt.scatter(0, 0, color='green', marker='*', s=200, label='Camera position')
+
+        
+    plt.xlabel("Z (m)")
+    plt.ylabel("X (m)")
+    #plt.title("GNSS Data and Free Space")
+    ax = plt.gca()
+
+    ax.set_xlabel("X [m]", fontsize=16)
+    ax.set_ylabel("Z [m]", fontsize=16)
+    ax.tick_params(axis='both', which='major', labelsize=14)
+    plt.legend(fontsize=14)
+
+
+
+    plt.grid(True)
+    plt.savefig("images/bev_consistency_200_frames_v7.png", dpi=300, bbox_inches='tight')
+
+
+    #plt.ioff()
+    #plt.show()
+    plt.close()
+    #plt.show(block=False)
+    #plt.pause(1)  # Display the plot for a short period
+    #plt.close()
+
 
 
 
@@ -176,6 +397,36 @@ def transform_stixel_points(stixel_points, boat_position, heading):
     transformed_points.append(transformed_points[0]) # close the polygon
 
     return transformed_points
+
+def transform_stixel_points_local(stixel_points, prev_pos, prev_heading, curr_pos, curr_heading):
+    offset_y = - TRANS_FLOOR_TO_LIDAR[0]
+    offset_x = - TRANS_FLOOR_TO_LIDAR[1]
+    cam_offset = np.array([offset_x, offset_y])
+
+    transformed_points = []
+
+    R_prev = rotation_matrix(prev_heading)
+    R_curr = rotation_matrix(curr_heading)
+
+
+    prev_cam_global = np.array(prev_pos) + R_prev.dot(np.array(cam_offset))
+    curr_cam_global = np.array(curr_pos) + R_curr.dot(np.array(cam_offset))
+
+    for x, y in stixel_points:
+
+        p_prev_cam = np.array([x, y])
+
+        p_global = prev_cam_global + R_prev.dot(p_prev_cam)
+
+        p_current_cam = R_curr.T.dot(p_global - curr_cam_global)
+        transformed_points.append(tuple(p_current_cam))
+
+
+    return transformed_points
+
+def rotation_matrix(theta):
+    return np.array([[math.cos(theta), -math.sin(theta)],
+                     [math.sin(theta),  math.cos(theta)]])
 
 def get_transform_piren_ned_from_vessel(self):
     ma2_tpose = self._get_ma2_tpose_ned()

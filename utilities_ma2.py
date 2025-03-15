@@ -56,9 +56,9 @@ svo_clap_timestamps = np.array([1689070864415441257, 1689070866090016257, 168907
 #SVO_FILE_PATH = r"C:\Users\johro\Documents\2023-07-11_Multi_ZED_Summer\ZED camera svo files\2023-07-11_12-55-58_28170706_HD1080_FPS15.svo" #port side zed
 #SVO_FILE_PATH = r"C:\Users\johro\Documents\2023-07-11_Multi_ZED_Summer\ZED camera svo files\2023-07-11_12-55-58_5256916_HD1080_FPS15.svo" # left zed
 #ROSBAG_NAME = "scen6"
-#START_TIMESTAMP = 1689073008428931880# Starting to see tube
+#START_TIMESTAMP = 1689073008428931880 #+ 2000000000  # Starting to see tube
 #START_TIMESTAMP = 1689073018428931880 # tube almost passed
-#START_TIMESTAMP = 1689073021428931880 # tube passed
+#START_TIMESTAMP = 1689073021428931880 + 1000000000 # tube passed
 #ma2_clap_timestamps = np.array([1689072978427718986, 1689072980427686560, 1689072982230896164, 1689072984228220707])
 #svo_clap_timestamps = np.array([1689072978666263269, 1689072980675916269, 1689072982484494269, 1689072984360142269])
 
@@ -152,7 +152,7 @@ baseline = np.linalg.norm(T)
 width, height = 1920, 1080
 
 def gen_svo_images():
-    num_frames = 200 # 275
+    num_frames = 15 # 275
     curr_frame = 0
     while stereo_cam.grab() == sl.ERROR_CODE.SUCCESS and curr_frame < num_frames:
         image = stereo_cam.get_left_image(should_rectify=True)
